@@ -11,6 +11,10 @@
  *   contract a backend calls after running a test (P-013)
  * - junit: aggregateJUnitCases — the pure JUnit rollup both projects'
  *   CI-results views share (P-012 data layer)
+ * - k6: category taxonomy + filter helpers for the DomainTestPanel k6
+ *   controls (P-010, ported from Restart /load-tests)
+ * - sse: readSSEStream + pure frame helpers, so a host TestingDataSource can
+ *   implement the optional streamRun live-log path (P-011)
  * - AdoptionMatrixPanel: the testing-spec adoption matrix, host-injected via
  *   load(signal)/reloadKey (promoted from Restart for cross-project use)
  */
@@ -18,6 +22,8 @@ export * from './registry';
 export * from './data-source';
 export * from './run-status';
 export * from './junit';
+export * from './k6';
+export * from './sse';
 export { default as JUnitRollupPanel, type JUnitRollupPanelProps } from './JUnitRollupPanel';
 export * from './platform';
 export * from './web/observer';

@@ -18,8 +18,8 @@
  * existing bespoke tabs mount their UI inside the same shell.
  */
 
-import { useEffect, useState, type ReactNode, type ReactElement } from 'react';
-import { useQueryState } from 'nuqs';
+import { useEffect, useState, useRef, type ReactNode, type ReactElement } from 'react';
+import { useQueryState, parseAsString } from 'nuqs';
 import './domain-panel.css';
 import {
   type TestingDataSource,
@@ -30,6 +30,15 @@ import {
   type ChipStatus,
   type TestRunnerWire,
 } from './data-source';
+import {
+  k6CategoriesPresent,
+  k6CategoryColor,
+  k6CategoryLabel,
+  visibleByCategory,
+} from './k6';
+
+/** The k6 member of the runner union — the only runner with interactive controls. */
+type K6Runner = Extract<TestRunnerWire, { kind: 'k6' }>;
 
 function formatMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -111,6 +120,9 @@ export default function DomainTestPanel({
   // P-018: clicking a status chip opens a per-file run-history sheet.
   // URL-backed for the same reasons.
   const [historyFile, setHistoryFile] = useQueryState('historyFile');
+  // P-010: active k6 category filter chip. URL-backed (filter state) so it
+  // deep-links + is agent-driveable; default 'all'.
+  const [k6cat, setK6cat] = useQueryState('k6cat', parseAsString.withDefault('all'));
   const [activeRun, setActiveRun] = useState<{
     runId: string;
     filePath: string;
@@ -120,6 +132,8 @@ export default function DomainTestPanel({
     finishedAt: number | null;
   } | null>(null);
   const [runLoading, setRunLoading] = useState<string | null>(null);
+  // P-011: aborts an in-flight streamRun (Stop button / drawer close).
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   async function runVitestMulti(filePaths: string[], label: string): Promise<void> {
     const key = `__multi__:${label}`;
@@ -136,7 +150,68 @@ export default function DomainTestPanel({
     await runImpl({ runner: { kind: 'vitest', filePath } }, filePath);
   }
 
+  // P-010: dispatch a k6 runner with the user's VUs/duration overrides.
+  async function runK6(runner: K6Runner, vusOverride?: number, durationOverride?: string): Promise<void> {
+    const label = `k6 ${runner.script}`;
+    setRunLoading(label);
+    setActiveRun({ runId: '', filePath: label, status: 'starting', exitCode: null, output: '', finishedAt: null });
+    void setRunFile(label);
+    await runImpl(
+      {
+        runner: {
+          kind: 'k6',
+          script: runner.script,
+          vus: vusOverride ?? runner.vus,
+          duration: durationOverride ?? runner.duration,
+          category: runner.category,
+        },
+      },
+      label,
+    );
+  }
+
+  // P-011: when the backend implements streamRun, prefer it — live-append the
+  // log lines (abortable via Stop) instead of polling. Falls through to the
+  // startRun+pollRun path below when streamRun is undefined.
+  async function streamImpl(body: unknown, displayPath: string): Promise<void> {
+    const ac = new AbortController();
+    streamAbortRef.current = ac;
+    setActiveRun({ runId: 'stream', filePath: displayPath, status: 'running', exitCode: null, output: '', finishedAt: null });
+    try {
+      const { exitCode } = await dataSource.streamRun!(
+        body,
+        (line) =>
+          setActiveRun((prev) =>
+            prev ? { ...prev, output: prev.output ? `${prev.output}\n${line}` : line } : prev,
+          ),
+        ac.signal,
+      );
+      setActiveRun((prev) =>
+        prev ? { ...prev, status: exitCode === 0 ? 'pass' : 'fail', exitCode, finishedAt: Date.now() } : prev,
+      );
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') {
+        setActiveRun((prev) => (prev ? { ...prev, status: 'cancelled', finishedAt: Date.now() } : prev));
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        setActiveRun((prev) =>
+          prev
+            ? { ...prev, status: 'error', output: prev.output ? `${prev.output}\n${msg}` : msg, finishedAt: Date.now() }
+            : prev,
+        );
+      }
+    } finally {
+      streamAbortRef.current = null;
+      setRunLoading(null);
+      void dataSource.fetchStatuses(domainId).then((s) => setStatuses(s)).catch(() => { /* keep stale */ });
+    }
+  }
+
   async function runImpl(body: unknown, displayPath: string): Promise<void> {
+    if (dataSource.streamRun) {
+      await streamImpl(body, displayPath);
+      return;
+    }
     try {
       let runId: string;
       try {
@@ -286,10 +361,18 @@ export default function DomainTestPanel({
             <span className="pc-dtp-drawer-meta">
               status: {activeRun.status}{activeRun.exitCode !== null ? ` · exit ${activeRun.exitCode}` : ''}
             </span>
+            {activeRun.status === 'running' && streamAbortRef.current && (
+              <button
+                type="button"
+                className="pc-dtp-drawer-stop"
+                onClick={() => streamAbortRef.current?.abort()}
+                title="Stop the running stream"
+              >■ Stop</button>
+            )}
             <button
               type="button"
               className="pc-dtp-drawer-close"
-              onClick={() => { setActiveRun(null); void setRunFile(null); }}
+              onClick={() => { streamAbortRef.current?.abort(); setActiveRun(null); void setRunFile(null); }}
               title="Close"
             >×</button>
           </header>
@@ -330,6 +413,30 @@ export default function DomainTestPanel({
                 )}
               </header>
               {s.description && <p className="pc-dtp-section-description">{s.description}</p>}
+
+              {/* P-010: category filter chips — only when this section has k6 runners. */}
+              {(() => {
+                const cats = k6CategoriesPresent(s.runners);
+                if (cats.length === 0) return null;
+                return (
+                  <div className="pc-dtp-k6-chips" role="group" aria-label="Filter k6 runners by category">
+                    <button
+                      type="button"
+                      className={`pc-dtp-k6-chip${k6cat === 'all' ? ' is-active' : ''}`}
+                      onClick={() => void setK6cat('all')}
+                    >all</button>
+                    {cats.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`pc-dtp-k6-chip${k6cat === c ? ' is-active' : ''}`}
+                        style={k6cat === c ? { color: k6CategoryColor(c), borderColor: k6CategoryColor(c) } : undefined}
+                        onClick={() => void setK6cat(c)}
+                      >{k6CategoryLabel(c)}</button>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {s.files.length === 0 && s.runners.length === 0 ? (
                 <p className="pc-dtp-empty">No matching files.</p>
@@ -377,12 +484,21 @@ export default function DomainTestPanel({
                       </li>
                     );
                   })}
-                  {s.runners.map((r, i) => (
-                    <li key={`runner-${i}`} className="pc-dtp-file pc-dtp-runner">
-                      <code className="pc-dtp-file-path">⚙ {runnerLabel(r)}</code>
-                      <span className="pc-dtp-file-meta">{r.kind}</span>
-                    </li>
-                  ))}
+                  {visibleByCategory(s.runners, k6cat).map((r, i) =>
+                    r.kind === 'k6' ? (
+                      <K6RunnerRow
+                        key={`k6-${r.script}-${r.category ?? 'load'}`}
+                        runner={r}
+                        disabled={runLoading !== null}
+                        onRun={(vus, duration) => void runK6(r, vus, duration)}
+                      />
+                    ) : (
+                      <li key={`runner-${r.kind}-${i}`} className="pc-dtp-file pc-dtp-runner">
+                        <code className="pc-dtp-file-path">⚙ {runnerLabel(r)}</code>
+                        <span className="pc-dtp-file-meta">{r.kind}</span>
+                      </li>
+                    ),
+                  )}
                 </ul>
               )}
             </section>
@@ -390,6 +506,71 @@ export default function DomainTestPanel({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * P-010 — interactive row for a k6 runner: category badge + VUs/duration
+ * overrides + Run. The VUs/duration fields are mid-edit form drafts, so they
+ * live in local `useState` (per the nuqs convention — not shareable URL state);
+ * empty fields fall back to the runner's declared defaults on dispatch.
+ */
+function K6RunnerRow({
+  runner,
+  disabled,
+  onRun,
+}: {
+  runner: K6Runner;
+  disabled: boolean;
+  onRun: (vus: number | undefined, duration: string | undefined) => void;
+}): ReactElement {
+  const [vus, setVus] = useState<string>(runner.vus != null ? String(runner.vus) : '');
+  const [duration, setDuration] = useState<string>(runner.duration ?? '');
+  const cat = runner.category ?? 'load';
+  const color = k6CategoryColor(cat);
+  return (
+    <li className="pc-dtp-file pc-dtp-runner pc-dtp-k6">
+      <span
+        className="pc-dtp-k6-cat"
+        style={{ color, background: `color-mix(in srgb, ${color} 18%, transparent)` }}
+      >
+        {k6CategoryLabel(cat)}
+      </span>
+      <code className="pc-dtp-file-path">⚙ k6 {runner.script}</code>
+      <label className="pc-dtp-k6-field">
+        VUs
+        <input
+          type="number"
+          min={1}
+          max={500}
+          className="pc-dtp-k6-input"
+          aria-label={`VUs for ${runner.script}`}
+          value={vus}
+          placeholder={runner.vus != null ? String(runner.vus) : 'default'}
+          disabled={disabled}
+          onChange={(e) => setVus(e.target.value)}
+        />
+      </label>
+      <label className="pc-dtp-k6-field">
+        dur
+        <input
+          type="text"
+          className="pc-dtp-k6-input pc-dtp-k6-input-dur"
+          aria-label={`Duration for ${runner.script}`}
+          value={duration}
+          placeholder={runner.duration ?? 'default'}
+          disabled={disabled}
+          onChange={(e) => setDuration(e.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className="pc-dtp-run-btn"
+        disabled={disabled}
+        onClick={() => onRun(vus ? Number(vus) : undefined, duration || undefined)}
+        title={`Run k6 ${runner.script}`}
+      >▶ Run</button>
+    </li>
   );
 }
 

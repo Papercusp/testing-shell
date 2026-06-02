@@ -34,7 +34,9 @@ import type { ReactNode } from 'react';
  * `node` / `shell` are explicit ad-hoc runners — these will shrink to zero
  * after Phase 5 framework standardization (D-006).
  * `k6` is a load-test script (porting Restart's /load-tests; the run route
- * spawns `k6 run <script>` with the given VUs/duration).
+ * spawns `k6 run <script>` with the given VUs/duration). `category` tags it
+ * with the smoke/load/stress/spike/soak/browser taxonomy so the panel can
+ * render the category badge + filter chips (see ./k6).
  * `admin-suite` defers to the existing admin-test-suites orchestrator.
  */
 export type TestRunner =
@@ -43,7 +45,7 @@ export type TestRunner =
   | { kind: 'cargo'; crate: string; test?: string }
   | { kind: 'node'; cmd: string; args?: string[]; label?: string }
   | { kind: 'shell'; cmd: string; args?: string[]; label?: string }
-  | { kind: 'k6'; script: string; vus?: number; duration?: string }
+  | { kind: 'k6'; script: string; vus?: number; duration?: string; category?: string }
   | { kind: 'admin-suite'; suiteId: string };
 
 /**

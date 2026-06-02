@@ -280,6 +280,105 @@
   color: var(--accent);
 }
 
+/* P-010 — k6 runner controls (category badge + VUs/duration + Run). The base
+   .pc-dtp-file is a fixed 4-col grid; the k6 row has more controls, so it
+   switches to a wrapping flex row. */
+.pc-dtp-file.pc-dtp-k6 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.pc-dtp-k6-cat {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pc-dtp-k6 .pc-dtp-file-path {
+  flex: 1 1 auto;
+}
+
+.pc-dtp-k6-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-mute);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pc-dtp-k6-input {
+  width: 62px;
+  min-height: 24px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.pc-dtp-k6-input-dur {
+  width: 78px;
+}
+
+.pc-dtp-k6-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+/* P-010 — category filter chip row above a section's k6 runners. */
+.pc-dtp-k6-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px 2px;
+}
+
+.pc-dtp-k6-chip {
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--fg-mute);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.pc-dtp-k6-chip:hover {
+  border-color: var(--border-strong);
+}
+
+.pc-dtp-k6-chip.is-active {
+  background: var(--bg-3);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+/* P-011 — Stop button in the run drawer header while a stream is live. */
+.pc-dtp-drawer-stop {
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  color: var(--bad);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .pc-dtp-custom {
   min-height: 0;
 }

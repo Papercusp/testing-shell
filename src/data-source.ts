@@ -28,7 +28,7 @@ export type TestRunnerWire =
   | { kind: 'cargo'; crate: string; test?: string }
   | { kind: 'node'; cmd: string; args?: string[]; label?: string }
   | { kind: 'shell'; cmd: string; args?: string[]; label?: string }
-  | { kind: 'k6'; script: string; vus?: number; duration?: string }
+  | { kind: 'k6'; script: string; vus?: number; duration?: string; category?: string }
   | { kind: 'admin-suite'; suiteId: string };
 
 export interface ResolvedSection {
@@ -106,6 +106,21 @@ export interface TestingDataSource {
   /** Poll a run by id. Null when the run can't be read (treated as transient). */
   pollRun(runId: string): Promise<RunSnapshot | null>;
   fetchHistory(filePath: string, limit: number): Promise<HistoryRow[]>;
+  /**
+   * Optional live-streaming run path (P-011). When a backend implements it,
+   * <DomainTestPanel> prefers it over startRun+pollRun: it POSTs the run
+   * descriptor, calls `onLine` for each emitted log line, and resolves with
+   * the final exit code when the stream ends (`null` = unknown). `signal`
+   * aborts the in-flight run (the panel passes one for the Stop button). A
+   * backend that can't stream omits this and the panel falls back to polling.
+   * The `readSSEStream` helper exported from the package makes implementing it
+   * a one-liner for `data: <json>` log streams (the k6 live-terminal shape).
+   */
+  streamRun?(
+    body: unknown,
+    onLine: (line: string) => void,
+    signal: AbortSignal,
+  ): Promise<{ exitCode: number | null }>;
 }
 
 /**
