@@ -100,7 +100,10 @@ export function remainderToRegex(rem: string): RegExp {
       }
     } else if (c === '?') {
       out += '[^/]';
-    } else if (/[.+^$()|\\]/.test(c)) {
+    } else if (/[.+^$()|\\[\]]/.test(c)) {
+      // Escape regex metachars — INCLUDING `[` and `]` so literal
+      // Next.js dynamic-route dirs (`app/users/github/[id]/...`) match
+      // as literals instead of being mis-read as a regex char class.
       out += `\\${c}`;
     } else {
       out += c;
