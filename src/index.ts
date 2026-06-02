@@ -18,6 +18,7 @@ export * from './registry';
 export * from './data-source';
 export * from './run-status';
 export * from './junit';
+export { default as JUnitRollupPanel, type JUnitRollupPanelProps } from './JUnitRollupPanel';
 export * from './platform';
 export * from './web/observer';
 export { default as LiveWebPanel } from './web/LiveWebPanel';
