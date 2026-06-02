@@ -21,6 +21,11 @@
       "types": "./src/data-source.ts",
       "import": "./src/data-source.ts",
       "default": "./src/data-source.ts"
+    },
+    "./glob": {
+      "types": "./src/glob.ts",
+      "import": "./src/glob.ts",
+      "default": "./src/glob.ts"
     }
   },
   "scripts": {
