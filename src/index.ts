@@ -19,6 +19,7 @@ export * from './junit';
 export * from './platform';
 export * from './web/observer';
 export { default as LiveWebPanel } from './web/LiveWebPanel';
+export { default as ChaosWebPanel, type ChaosWebPanelProps } from './web/ChaosWebPanel';
 export { default as DomainTestPanel } from './DomainTestPanel';
 export { default as TestingShell, tabsFromRegistry } from './TestingShell';
 export type { TestingShellTab, TestingShellProps } from './TestingShell';

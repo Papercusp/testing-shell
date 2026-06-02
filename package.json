@@ -26,6 +26,9 @@
       "types": "./src/glob.ts",
       "import": "./src/glob.ts",
       "default": "./src/glob.ts"
+    },
+    "./web/chaos-runner": {
+      "default": "./src/web/chaos-runner.mjs"
     }
   },
   "scripts": {
