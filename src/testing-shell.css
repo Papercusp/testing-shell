@@ -57,6 +57,15 @@
   text-transform: uppercase;
 }
 
+.pc-test-rail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
 .pc-test-tab-group {
   display: grid;
   gap: 6px;

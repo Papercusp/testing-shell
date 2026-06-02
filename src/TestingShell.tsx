@@ -16,7 +16,7 @@
  * Project) without touching this component.
  */
 
-import { type ReactElement } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { useQueryState, parseAsStringEnum } from 'nuqs';
 import './testing-shell.css';
 import DomainTestPanel from './DomainTestPanel';
@@ -56,6 +56,12 @@ export interface TestingShellProps {
   defaultTabId?: string;
   /** Heading above the nav. Defaults to "Testing". */
   sectionLabel?: string;
+  /**
+   * Optional content rendered in the left rail between the section label and
+   * the nav — e.g. a project switcher. Lets a host put rail-scoped controls
+   * here instead of a separate top bar. Omit for none (the operator does).
+   */
+  railHeader?: ReactNode;
   /** nuqs query key for the active tab. Defaults to "tab". */
   queryKey?: string;
   /**
@@ -89,6 +95,7 @@ export default function TestingShell({
   sectionLabel = 'Testing',
   queryKey = 'tab',
   platform = 'both',
+  railHeader,
 }: TestingShellProps): ReactElement {
   const shown = visibleTabs(tabs, platform);
   const tabIds = shown.map((t) => t.id) as [string, ...string[]];
@@ -112,6 +119,7 @@ export default function TestingShell({
     <div className="pc-test-shell">
       <aside className="pc-test-left">
         <h2 className="pc-test-section-label">{sectionLabel}</h2>
+        {railHeader ? <div className="pc-test-rail-header">{railHeader}</div> : null}
         <nav aria-label={`${sectionLabel} tabs`}>
           {groups.map(({ tier, label, tabs: tierTabs }) => (
             <div key={tier} className="pc-test-tab-group" data-tier={tier}>

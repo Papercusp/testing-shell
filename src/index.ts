@@ -11,6 +11,8 @@
  *   contract a backend calls after running a test (P-013)
  * - junit: aggregateJUnitCases — the pure JUnit rollup both projects'
  *   CI-results views share (P-012 data layer)
+ * - AdoptionMatrixPanel: the testing-spec adoption matrix, host-injected via
+ *   load(signal)/reloadKey (promoted from Restart for cross-project use)
  */
 export * from './registry';
 export * from './data-source';
@@ -20,6 +22,12 @@ export * from './platform';
 export * from './web/observer';
 export { default as LiveWebPanel } from './web/LiveWebPanel';
 export { default as ChaosWebPanel, type ChaosWebPanelProps } from './web/ChaosWebPanel';
+export {
+  default as AdoptionMatrixPanel,
+  type AdoptionMatrix,
+  type AdoptionMatrixPanelProps,
+  type AdoptionPackageStatus,
+} from './AdoptionMatrix';
 export { default as DomainTestPanel } from './DomainTestPanel';
 export { default as TestingShell, tabsFromRegistry } from './TestingShell';
 export type { TestingShellTab, TestingShellProps } from './TestingShell';
