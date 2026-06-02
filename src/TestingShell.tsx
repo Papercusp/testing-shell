@@ -22,6 +22,7 @@ import './testing-shell.css';
 import DomainTestPanel from './DomainTestPanel';
 import { type TestingDataSource } from './data-source';
 import { type TestDomain } from './registry';
+import { visibleTabs, type Platform, type TabPlatform } from './platform';
 
 /** One entry in the left-rail nav. */
 export interface TestingShellTab {
@@ -31,6 +32,8 @@ export interface TestingShellTab {
   hint: string;
   /** Tier id — should be a key of the shell's `tierLabels`. */
   tier: string;
+  /** Platform variant this tab belongs to; omit = platform-agnostic. */
+  platform?: TabPlatform;
 }
 
 export interface TestingShellProps {
@@ -55,6 +58,12 @@ export interface TestingShellProps {
   sectionLabel?: string;
   /** nuqs query key for the active tab. Defaults to "tab". */
   queryKey?: string;
+  /**
+   * Which platform(s) this host runs on. Tabs tagged with a non-matching
+   * `platform` are hidden. Defaults to 'both' (back-compat: untagged tabs
+   * always show).
+   */
+  platform?: Platform;
 }
 
 /**
@@ -79,11 +88,13 @@ export default function TestingShell({
   defaultTabId,
   sectionLabel = 'Testing',
   queryKey = 'tab',
+  platform = 'both',
 }: TestingShellProps): ReactElement {
-  const tabIds = tabs.map((t) => t.id) as [string, ...string[]];
+  const shown = visibleTabs(tabs, platform);
+  const tabIds = shown.map((t) => t.id) as [string, ...string[]];
   const [tab, setTab] = useQueryState(
     queryKey,
-    parseAsStringEnum<string>(tabIds).withDefault(defaultTabId ?? tabs[0]?.id ?? ''),
+    parseAsStringEnum<string>(tabIds).withDefault(defaultTabId ?? shown[0]?.id ?? ''),
   );
 
   // Group by tier in tierLabels key order; drop empty tiers.
@@ -91,7 +102,7 @@ export default function TestingShell({
     .map((tier) => ({
       tier,
       label: tierLabels[tier] ?? tier,
-      tabs: tabs.filter((t) => t.tier === tier),
+      tabs: shown.filter((t) => t.tier === tier),
     }))
     .filter((g) => g.tabs.length > 0);
 

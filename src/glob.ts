@@ -24,7 +24,7 @@
  */
 
 import { readdir, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, type Dirent } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 
 const IGNORE_DIRS = new Set([
@@ -116,7 +116,7 @@ export function remainderToRegex(rem: string): RegExp {
  * we never walk into them.
  */
 async function walk(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  let entries: Dirent<string>[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {

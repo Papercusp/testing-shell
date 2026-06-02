@@ -16,6 +16,7 @@ export * from './registry';
 export * from './data-source';
 export * from './run-status';
 export * from './junit';
+export * from './platform';
 export { default as DomainTestPanel } from './DomainTestPanel';
 export { default as TestingShell, tabsFromRegistry } from './TestingShell';
 export type { TestingShellTab, TestingShellProps } from './TestingShell';
