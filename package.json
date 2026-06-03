@@ -27,6 +27,11 @@
       "import": "./src/glob.ts",
       "default": "./src/glob.ts"
     },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "import": "./src/server/index.ts",
+      "default": "./src/server/index.ts"
+    },
     "./web/chaos-runner": {
       "default": "./src/web/chaos-runner.mjs"
     }
@@ -39,6 +44,14 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "nuqs": ">=2"
+    "nuqs": ">=2",
+    "hono": ">=4",
+    "playwright": "*",
+    "@browserbasehq/stagehand": "*"
+  },
+  "peerDependenciesMeta": {
+    "hono": { "optional": true },
+    "playwright": { "optional": true },
+    "@browserbasehq/stagehand": { "optional": true }
   }
 }
