@@ -115,7 +115,7 @@ export interface TestDomain {
  * entry (and the operator's `./testing-domains` shim) without importing
  * DomainTestPanel / TestingShell (which would crash the Hono/tsx server).
  */
-export { universalDomains } from './registry/universal';
+export { universalDomains, UNIVERSAL_PANEL_DOMAINS, type UniversalPanelDomain } from './registry/universal';
 
 const _registry = new Map<string, TestDomain>();
 

@@ -40,3 +40,4 @@ export {
 export { default as DomainTestPanel } from './DomainTestPanel';
 export { default as TestingShell, tabsFromRegistry } from './TestingShell';
 export type { TestingShellTab, TestingShellProps } from './TestingShell';
+export { buildUniversalTesting, type UniversalTestingConfig, type UniversalTesting } from './registry/universal-tabs';

@@ -5,21 +5,20 @@
  * each section names a logical `role` (no hardcoded glob) so a consumer
  * fills the globs for its own repo via {@link applyRoleGlobs}.
  *
- * Renamed from `generalizedRegistry`. The Papercusp-runtime-bound domains
- * that used to live here — test-runs (admin-suite orchestrator), live
- * (operator vitals), chaos (Tauri-shell clicker), ai (Stagehand walk over
- * the operator's admin routes) — moved into the operator's own
- * testing-domains-registry.ts, since they can't run against a non-Papercusp
- * project as-is (D-002 option b; generalizing chaos/ai/live to drive each
- * project's base URL is a deferred follow-up).
+ * Renamed from `generalizedRegistry`. `routes` is the one glob/role domain
+ * rendered by <DomainTestPanel> via a dataSource. The other universal domains
+ * — load (k6), live-web, chaos-web, ai-explore, chaos-desktop — are
+ * CUSTOM-PANEL domains: the lib ships their panels and they're wired by
+ * {@link buildUniversalTesting} as customTabs, NOT registered via
+ * defineTestDomain (un-defers testing-shell-cross-project D-002/D-007;
+ * supersedes D-008 — see universal-testing-domains-generic-2026-06-03).
  *
- * PURE DATA — does NOT call defineTestDomain. The consumer registers these
- * (the operator barrel does
- * `applyRoleGlobs(universalDomains, …).forEach(defineTestDomain)`), keeping
- * this file side-effect-free so the lib stays `sideEffects: false`.
+ * PURE DATA — does NOT call defineTestDomain / import React, so this file stays
+ * side-effect-free and server-importable via `@papercusp/testing-shell/registry`.
  */
 
-import { type TestDomain } from '../registry';
+import { type TestDomain, type TestTier } from '../registry';
+import { type TabPlatform } from '../platform';
 
 export const universalDomains: TestDomain[] = [
   {
@@ -40,3 +39,26 @@ export const universalDomains: TestDomain[] = [
     ],
   },
 ];
+
+/**
+ * Tab metadata for the universal CUSTOM-PANEL domains — the ones the lib ships
+ * a panel for. Pure data (no React) so this stays server-importable; the actual
+ * panels + wiring live in `buildUniversalTesting` (registry/universal-tabs.tsx).
+ * Each consumer opts a domain in by supplying its config block; presence ⇒ tab.
+ */
+export interface UniversalPanelDomain {
+  id: string;
+  label: string;
+  description: string;
+  tier: TestTier;
+  /** Platform variant; omit = agnostic (shown on every platform). */
+  platform?: TabPlatform;
+}
+
+export const UNIVERSAL_PANEL_DOMAINS: Record<string, UniversalPanelDomain> = {
+  load: { id: 'load', label: 'Load (k6)', description: 'smoke / load / stress / spike / soak', tier: 'universal' },
+  'live-web': { id: 'live-web', label: 'Live', description: 'in-page console / error / CLS / long-task observer', tier: 'universal' },
+  'chaos-web': { id: 'chaos-web', label: 'Chaos (web)', description: 'headless random-clicker over the app', tier: 'universal', platform: 'web' },
+  'ai-explore': { id: 'ai-explore', label: 'AI Explore', description: 'Stagehand LLM walk over the app', tier: 'universal', platform: 'web' },
+  'chaos-desktop': { id: 'chaos-desktop', label: 'Chaos (desktop)', description: 'in-app perf-recorder clicker (Tauri)', tier: 'universal', platform: 'desktop' },
+};
