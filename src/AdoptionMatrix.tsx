@@ -15,6 +15,8 @@
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
+const alpha = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+
 export interface AdoptionPackageStatus {
   workspace: string;
   name: string;
@@ -60,12 +62,12 @@ export interface AdoptionMatrixPanelProps {
 }
 
 const yes = (b: boolean, value?: number | string) =>
-  b ? <span style={{ color: '#10b981' }}>{value !== undefined ? value : '✓'}</span>
-    : <span style={{ color: '#374151' }}>—</span>;
+  b ? <span style={{ color: 'var(--good)' }}>{value !== undefined ? value : '✓'}</span>
+    : <span style={{ color: 'var(--fg-mute)' }}>—</span>;
 
 const num = (n: number) =>
-  n > 0 ? <span style={{ color: '#10b981' }}>{n}</span>
-        : <span style={{ color: '#374151' }}>0</span>;
+  n > 0 ? <span style={{ color: 'var(--good)' }}>{n}</span>
+        : <span style={{ color: 'var(--fg-mute)' }}>0</span>;
 
 export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixPanelProps): ReactElement {
   const [data, setData] = useState<AdoptionMatrix | null>(null);
@@ -86,8 +88,8 @@ export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixP
     return () => ac.abort();
   }, [reloadKey]);
 
-  if (error) return <div style={{ background: '#7f1d1d', border: '1px solid #ef4444', padding: 12, borderRadius: 4, color: '#fee2e2' }}>Scan failed: {error}</div>;
-  if (!data) return <div style={{ color: '#9ca3af' }}>scanning…</div>;
+  if (error) return <div style={{ background: alpha('var(--bad)', 20), border: '1px solid var(--bad)', padding: 12, borderRadius: 4, color: 'var(--bad)' }}>Scan failed: {error}</div>;
+  if (!data) return <div style={{ color: 'var(--fg-dim)' }}>scanning…</div>;
 
   const { totals, packages } = data;
 
@@ -104,7 +106,7 @@ export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixP
         <Stat label="Baselines" value={totals.totalBaselines} />
       </section>
 
-      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+      <p style={{ fontSize: 12, color: 'var(--fg-mute)', marginBottom: 8 }}>
         Scanning <code>{data.scanRoot}</code>. Click any package name to copy its workspace path.
       </p>
 
@@ -126,10 +128,10 @@ export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixP
         </thead>
         <tbody>
           {packages.map((p) => (
-            <tr key={p.workspace} style={{ borderBottom: '1px solid #1f2937' }}>
+            <tr key={p.workspace} style={{ borderBottom: '1px solid var(--border)' }}>
               <td style={tdLeftStyle}>
                 <div style={{ fontWeight: 500 }}>{p.name}</div>
-                <code style={{ fontSize: 10, color: '#6b7280' }}>{p.workspace}</code>
+                <code style={{ fontSize: 10, color: 'var(--fg-mute)' }}>{p.workspace}</code>
               </td>
               <td style={tdStyle}>{yes(p.hasTestingMd)}</td>
               <td style={tdStyle}>{num(p.unitTestFiles)}</td>
@@ -137,10 +139,10 @@ export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixP
               <td style={tdStyle}>{num(p.propertyTestFiles)}</td>
               <td style={tdStyle}>{num(p.benchFiles)}</td>
               <td style={tdStyle}>{yes(p.hasVitestConfig)}</td>
-              <td style={tdStyle}>{p.hasVitestConfig ? yes(p.usesDefineVitestConfig) : <span style={{ color: '#374151' }}>—</span>}</td>
+              <td style={tdStyle}>{p.hasVitestConfig ? yes(p.usesDefineVitestConfig) : <span style={{ color: 'var(--fg-mute)' }}>—</span>}</td>
               <td style={tdStyle}>{yes(p.hasStorybook)}</td>
               <td style={tdStyle}>{num(p.storyFiles)}</td>
-              <td style={tdStyle}>{p.hasLostPixelConfig ? num(p.baselineCount) : <span style={{ color: '#374151' }}>—</span>}</td>
+              <td style={tdStyle}>{p.hasLostPixelConfig ? num(p.baselineCount) : <span style={{ color: 'var(--fg-mute)' }}>—</span>}</td>
             </tr>
           ))}
         </tbody>
@@ -150,13 +152,13 @@ export default function AdoptionMatrixPanel({ load, reloadKey }: AdoptionMatrixP
 }
 
 function Stat({ label, value, pct }: { label: string; value: number | string; pct?: number }) {
-  const color = pct === undefined ? '#9ca3af'
-              : pct >= 0.8 ? '#10b981'
-              : pct >= 0.4 ? '#f59e0b'
-              : '#ef4444';
+  const color = pct === undefined ? 'var(--fg-dim)'
+              : pct >= 0.8 ? 'var(--good)'
+              : pct >= 0.4 ? 'var(--warn)'
+              : 'var(--bad)';
   return (
-    <div style={{ background: '#0f172a', border: '1px solid #1f2937', borderRadius: 4, padding: 10 }}>
-      <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4, padding: 10 }}>
+      <div style={{ fontSize: 10, color: 'var(--fg-mute)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4, color }}>{value}</div>
     </div>
   );
@@ -164,12 +166,12 @@ function Stat({ label, value, pct }: { label: string; value: number | string; pc
 
 const tableStyle: React.CSSProperties = {
   width: '100%', borderCollapse: 'collapse',
-  background: '#0f172a', border: '1px solid #1f2937', borderRadius: 4,
-  fontSize: 12, color: '#d1d5db',
+  background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4,
+  fontSize: 12, color: 'var(--fg-dim)',
 };
 const thStyle: React.CSSProperties = {
   padding: '8px 8px', textAlign: 'center',
-  borderBottom: '1px solid #1f2937', color: '#9ca3af', fontWeight: 500,
+  borderBottom: '1px solid var(--border)', color: 'var(--fg-dim)', fontWeight: 500,
   fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5,
   whiteSpace: 'nowrap',
 };

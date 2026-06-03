@@ -9,6 +9,8 @@
  */
 import { useRef, useState, type ReactElement } from 'react';
 
+const alpha = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
+
 export interface ChaosWebPanelProps {
   /** Host endpoint that spawns chaos-runner.mjs and streams its NDJSON. */
   runEndpoint: string;
@@ -53,10 +55,10 @@ function formatLine(json: string): string {
 }
 
 function lineColor(line: string): string {
-  if (line.startsWith('✗') || line.startsWith('!')) return '#f43f5e';
-  if (line.startsWith('✓')) return '#4ade80';
-  if (line.startsWith('▶')) return '#60a5fa';
-  return '#94a3b8';
+  if (line.startsWith('✗') || line.startsWith('!')) return 'var(--bad)';
+  if (line.startsWith('✓')) return 'var(--good)';
+  if (line.startsWith('▶')) return 'var(--accent)';
+  return 'var(--fg-dim)';
 }
 
 export default function ChaosWebPanel({ runEndpoint, baseUrl, defaultMaxSteps = 25 }: ChaosWebPanelProps): ReactElement {
@@ -106,11 +108,11 @@ export default function ChaosWebPanel({ runEndpoint, baseUrl, defaultMaxSteps = 
   };
 
   return (
-    <div style={{ padding: 16, height: '100%', display: 'flex', flexDirection: 'column', color: '#e5e7eb', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ padding: 16, height: '100%', display: 'flex', flexDirection: 'column', color: 'var(--fg)', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Chaos (browser)</h2>
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>autonomous clicker over <code>{baseUrl}</code></span>
-        <label style={{ marginLeft: 'auto', fontSize: 12, color: '#9ca3af' }}>
+        <span style={{ fontSize: 12, color: 'var(--fg-dim)' }}>autonomous clicker over <code>{baseUrl}</code></span>
+        <label style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--fg-dim)' }}>
           steps{' '}
           <input
             type="number"
@@ -119,18 +121,18 @@ export default function ChaosWebPanel({ runEndpoint, baseUrl, defaultMaxSteps = 
             value={maxSteps}
             disabled={running}
             onChange={(e) => setMaxSteps(Number(e.target.value) || 1)}
-            style={{ width: 64, background: '#0b0e14', border: '1px solid #1e2535', color: '#e2e8f0', borderRadius: 4, padding: '4px 6px' }}
+            style={{ width: 64, background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--fg)', borderRadius: 4, padding: '4px 6px' }}
           />
         </label>
         {running ? (
-          <button type="button" onClick={stop} style={{ background: '#f43f5e22', border: '1px solid #f43f5e66', color: '#f43f5e', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Stop</button>
+          <button type="button" onClick={stop} style={{ background: alpha('var(--bad)', 13), border: `1px solid ${alpha('var(--bad)', 40)}`, color: 'var(--bad)', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Stop</button>
         ) : (
-          <button type="button" onClick={start} style={{ background: '#60a5fa22', border: '1px solid #60a5fa66', color: '#60a5fa', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Run</button>
+          <button type="button" onClick={start} style={{ background: alpha('var(--accent)', 13), border: `1px solid ${alpha('var(--accent)', 40)}`, color: 'var(--accent)', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Run</button>
         )}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', background: '#07090f', border: '1px solid #1e2535', borderRadius: 4, padding: 12, fontFamily: 'ui-monospace, monospace', fontSize: 12, lineHeight: 1.6 }}>
+      <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 4, padding: 12, fontFamily: 'ui-monospace, monospace', fontSize: 12, lineHeight: 1.6 }}>
         {lines.length === 0 ? (
-          <span style={{ color: '#374151' }}>No run yet. Click Run to drive {baseUrl} and look for console errors / crashes.</span>
+          <span style={{ color: 'var(--fg-mute)' }}>No run yet. Click Run to drive {baseUrl} and look for console errors / crashes.</span>
         ) : (
           lines.map((line, i) => (
             <div key={i} style={{ color: lineColor(line), whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
