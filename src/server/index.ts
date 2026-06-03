@@ -15,3 +15,4 @@
  * barrel never imports the optional `hono` peer either.
  */
 export * from './k6';
+export * from './chaos';
