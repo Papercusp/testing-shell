@@ -39,6 +39,9 @@
     },
     "./web/chaos-runner": {
       "default": "./src/web/chaos-runner.mjs"
+    },
+    "./server/stagehand-runner": {
+      "default": "./src/server/stagehand-runner.mjs"
     }
   },
   "scripts": {
