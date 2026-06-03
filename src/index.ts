@@ -41,3 +41,6 @@ export { default as DomainTestPanel } from './DomainTestPanel';
 export { default as TestingShell, tabsFromRegistry } from './TestingShell';
 export type { TestingShellTab, TestingShellProps } from './TestingShell';
 export { buildUniversalTesting, type UniversalTestingConfig, type UniversalTesting } from './registry/universal-tabs';
+export { default as ChaosDesktopPanel, type ChaosDesktopPanelProps } from './desktop/ChaosDesktopPanel';
+export { default as RecorderHost } from './desktop/RecorderHost';
+export * from './desktop/recorder-channel';

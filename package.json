@@ -55,11 +55,13 @@
     "nuqs": ">=2",
     "hono": ">=4",
     "playwright": "*",
-    "@browserbasehq/stagehand": "*"
+    "@browserbasehq/stagehand": "*",
+    "gremlins.js": ">=2"
   },
   "peerDependenciesMeta": {
     "hono": { "optional": true },
     "playwright": { "optional": true },
-    "@browserbasehq/stagehand": { "optional": true }
+    "@browserbasehq/stagehand": { "optional": true },
+    "gremlins.js": { "optional": true }
   }
 }

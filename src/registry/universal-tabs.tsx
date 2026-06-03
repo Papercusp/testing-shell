@@ -21,6 +21,7 @@ import LoadTestPanel from '../web/LoadTestPanel';
 import LiveWebPanel from '../web/LiveWebPanel';
 import ChaosWebPanel from '../web/ChaosWebPanel';
 import AiExplorePanel, { type AiExploreModelOption } from '../web/AiExplorePanel';
+import ChaosDesktopPanel from '../desktop/ChaosDesktopPanel';
 
 export interface UniversalTestingConfig {
   /** Endpoint-test globs for the `routes` domain. Omit → no Routes tab. The host must also register the domain (applyRoleGlobs). */
@@ -33,6 +34,8 @@ export interface UniversalTestingConfig {
   chaosWeb?: { runEndpoint: string; baseUrl: string; defaultMaxSteps?: number };
   /** Stagehand LLM walk over a base URL (web). Omit → no AI Explore tab. */
   aiExplore?: { runEndpoint: string; defaultStartUrl: string; defaultGoal?: string; models?: AiExploreModelOption[] };
+  /** In-app perf-recorder chaos (desktop). The host must mount <RecorderHost> at recorderUrl. Omit → no Chaos (desktop) tab. */
+  chaosDesktop?: { recorderUrl?: string; defaultRoute?: string; blocklist?: string; durations?: Record<string, number> };
 }
 
 export interface UniversalTesting {
@@ -64,6 +67,10 @@ export function buildUniversalTesting(cfg: UniversalTestingConfig): UniversalTes
   if (cfg.aiExplore) {
     const a = cfg.aiExplore;
     add('ai-explore', () => <AiExplorePanel runEndpoint={a.runEndpoint} defaultStartUrl={a.defaultStartUrl} defaultGoal={a.defaultGoal} models={a.models} />);
+  }
+  if (cfg.chaosDesktop) {
+    const cd = cfg.chaosDesktop;
+    add('chaos-desktop', () => <ChaosDesktopPanel recorderUrl={cd.recorderUrl} defaultRoute={cd.defaultRoute} blocklist={cd.blocklist} durations={cd.durations} />);
   }
 
   return { tabs, customTabs };
