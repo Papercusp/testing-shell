@@ -32,6 +32,11 @@
       "import": "./src/server/index.ts",
       "default": "./src/server/index.ts"
     },
+    "./server/k6-routes": {
+      "types": "./src/server/k6-routes.ts",
+      "import": "./src/server/k6-routes.ts",
+      "default": "./src/server/k6-routes.ts"
+    },
     "./web/chaos-runner": {
       "default": "./src/web/chaos-runner.mjs"
     }

@@ -29,6 +29,7 @@ export * from './platform';
 export * from './web/observer';
 export { default as LiveWebPanel } from './web/LiveWebPanel';
 export { default as ChaosWebPanel, type ChaosWebPanelProps } from './web/ChaosWebPanel';
+export { default as LoadTestPanel, type LoadTestPanelProps } from './web/LoadTestPanel';
 export {
   default as AdoptionMatrixPanel,
   type AdoptionMatrix,

@@ -10,6 +10,8 @@
  *
  * Heavy browser deps (playwright, @browserbasehq/stagehand) are OPTIONAL peer
  * deps — the cores resolve/spawn them lazily at run time, so importing this
- * barrel never touches them at module load.
+ * barrel never touches them at module load. The Hono convenience routers live
+ * in sibling `*-routes.ts` files behind their own subpath exports, so this
+ * barrel never imports the optional `hono` peer either.
  */
-export {};
+export * from './k6';
