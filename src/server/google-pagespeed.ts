@@ -207,5 +207,10 @@ export async function runPageSpeed(
     }
     throw new Error(`PageSpeed API ${res.status}${detail ? `: ${detail}` : ''}`);
   }
-  return summarizePageSpeed(await res.json(), cfg.strategy);
+  const summary = summarizePageSpeed(await res.json(), cfg.strategy);
+  // The persisted key must be the canonical (already-normalized) request URL, not
+  // whatever PSI echoes — so the panel's history/browse query (which normalizes
+  // the same way) reliably matches saved rows. `cfg.url` is `new URL(input).toString()`.
+  summary.requestedUrl = cfg.url;
+  return summary;
 }

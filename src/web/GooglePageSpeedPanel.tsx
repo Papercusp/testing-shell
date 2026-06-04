@@ -30,6 +30,16 @@ function scoreColor(score: number | null): string {
   return '#ff4e42';
 }
 
+/** Canonicalize the same way the server does (`new URL().toString()`) so the
+ * history/browse query matches the persisted (normalized) `url` key. */
+function normalizeUrl(u: string): string {
+  try {
+    return new URL(u).toString();
+  } catch {
+    return u;
+  }
+}
+
 function join(base: string, params: Record<string, string | undefined>): string {
   const qs = Object.entries(params)
     .filter(([, v]) => v != null && v !== '')
@@ -70,7 +80,7 @@ export default function GooglePageSpeedPanel({
   const loadHistory = useCallback(async () => {
     if (!resultsEndpoint) return;
     try {
-      const r = await fetch(join(resultsEndpoint, { url, strategy, limit: '20' }));
+      const r = await fetch(join(resultsEndpoint, { url: normalizeUrl(url), strategy, limit: '20' }));
       if (!r.ok) return;
       const d = (await r.json()) as { results: PageSpeedRecord[] };
       setHistory(d.results ?? []);

@@ -77,6 +77,9 @@ describe('GooglePageSpeedPanel', () => {
     const improved = screen.getAllByLabelText(/improved/);
     expect(improved.length).toBeGreaterThan(0); // perf up + lcp down both improved
     expect(improved.some((el) => /%/.test(el.textContent ?? ''))).toBe(true); // shows a % next to the arrow
+    // history is queried with the NORMALIZED url (trailing slash) so it matches saved rows
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/results') && String(c[0]).includes('shop.buyrestart.com%2F'))).toBe(true);
   });
 
   it('runs a new report on click (POST to runEndpoint)', async () => {

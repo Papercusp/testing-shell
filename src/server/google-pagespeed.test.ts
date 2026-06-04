@@ -85,10 +85,12 @@ describe('runPageSpeed', () => {
       return new Response(JSON.stringify(raw), { status: 200 });
     }) as unknown as typeof fetch;
     const s = await runPageSpeed(
-      { url: 'https://shop.buyrestart.com/', strategy: 'mobile' },
+      { url: 'https://shop.buyrestart.com/pricing', strategy: 'mobile' },
       { apiKey: 'TESTKEY', fetchImpl },
     );
     expect(s.categories.performance).toBe(80);
+    // requestedUrl is forced to the canonical cfg.url (not PSI's echoed id) so it's a stable history key.
+    expect(s.requestedUrl).toBe('https://shop.buyrestart.com/pricing');
   });
 
   it('throws with the API error message on a non-200 (e.g. 429 quota)', async () => {
