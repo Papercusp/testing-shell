@@ -44,3 +44,4 @@ export { buildUniversalTesting, type UniversalTestingConfig, type UniversalTesti
 export { default as ChaosDesktopPanel, type ChaosDesktopPanelProps } from './desktop/ChaosDesktopPanel';
 export { default as RecorderHost } from './desktop/RecorderHost';
 export * from './desktop/recorder-channel';
+export { default as LlmTestPanel, type LlmTestPanelProps } from './llm/LlmTestPanel';

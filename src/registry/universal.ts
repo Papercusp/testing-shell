@@ -61,4 +61,5 @@ export const UNIVERSAL_PANEL_DOMAINS: Record<string, UniversalPanelDomain> = {
   'chaos-web': { id: 'chaos-web', label: 'Chaos (web)', description: 'headless random-clicker over the app', tier: 'universal', platform: 'web' },
   'ai-explore': { id: 'ai-explore', label: 'AI Explore', description: 'Stagehand LLM walk over the app', tier: 'universal', platform: 'web' },
   'chaos-desktop': { id: 'chaos-desktop', label: 'Chaos (desktop)', description: 'in-app perf-recorder clicker (Tauri)', tier: 'universal', platform: 'desktop' },
+  llm: { id: 'llm', label: 'LLM', description: 'scenario-driven LLM evaluation (sim-user → SUT → judge)', tier: 'universal' },
 };
