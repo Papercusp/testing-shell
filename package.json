@@ -37,6 +37,11 @@
       "import": "./src/server/k6-routes.ts",
       "default": "./src/server/k6-routes.ts"
     },
+    "./server/google-pagespeed-routes": {
+      "types": "./src/server/google-pagespeed-routes.ts",
+      "import": "./src/server/google-pagespeed-routes.ts",
+      "default": "./src/server/google-pagespeed-routes.ts"
+    },
     "./web/chaos-runner": {
       "default": "./src/web/chaos-runner.mjs"
     },

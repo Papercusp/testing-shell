@@ -45,4 +45,20 @@ describe('buildUniversalTesting', () => {
     expect(() => render(Live())).not.toThrow();
     expect(() => render(Ai())).not.toThrow();
   });
+
+  it('emits a Google PageSpeed tab (web) + customTab when configured', () => {
+    const { tabs, customTabs } = buildUniversalTesting({
+      googlePageSpeed: { runEndpoint: '/api/google-pagespeed/run', defaultUrl: 'https://shop.buyrestart.com' },
+    });
+    const tab = tabs.find((t) => t.id === 'google-pagespeed')!;
+    expect(tab.label).toBe('Google PageSpeed');
+    expect(tab.tier).toBe('universal');
+    expect(tab.platform).toBe('web');
+    expect(typeof customTabs['google-pagespeed']).toBe('function');
+  });
+
+  it('omits the Google PageSpeed tab when not configured', () => {
+    const { tabs } = buildUniversalTesting({ liveObserver: true });
+    expect(tabs.find((t) => t.id === 'google-pagespeed')).toBeUndefined();
+  });
 });

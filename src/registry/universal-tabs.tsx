@@ -21,6 +21,8 @@ import LoadTestPanel from '../web/LoadTestPanel';
 import LiveWebPanel from '../web/LiveWebPanel';
 import ChaosWebPanel from '../web/ChaosWebPanel';
 import AiExplorePanel, { type AiExploreModelOption } from '../web/AiExplorePanel';
+import GooglePageSpeedPanel from '../web/GooglePageSpeedPanel';
+import { type PageSpeedStrategy } from '../pagespeed';
 import ChaosDesktopPanel from '../desktop/ChaosDesktopPanel';
 
 export interface UniversalTestingConfig {
@@ -34,6 +36,8 @@ export interface UniversalTestingConfig {
   chaosWeb?: { runEndpoint: string; baseUrl: string; defaultMaxSteps?: number };
   /** Stagehand LLM walk over a base URL (web). Omit → no AI Explore tab. */
   aiExplore?: { runEndpoint: string; defaultStartUrl: string; defaultGoal?: string; models?: AiExploreModelOption[] };
+  /** Google PageSpeed Insights (Lighthouse) against a public URL. Omit → no PageSpeed tab. */
+  googlePageSpeed?: { runEndpoint: string; resultsEndpoint?: string; urlsEndpoint?: string; defaultUrl: string; defaultStrategy?: PageSpeedStrategy };
   /** In-app perf-recorder chaos (desktop). The host must mount <RecorderHost> at recorderUrl. Omit → no Chaos (desktop) tab. */
   chaosDesktop?: { recorderUrl?: string; defaultRoute?: string; blocklist?: string; durations?: Record<string, number> };
 }
@@ -67,6 +71,18 @@ export function buildUniversalTesting(cfg: UniversalTestingConfig): UniversalTes
   if (cfg.aiExplore) {
     const a = cfg.aiExplore;
     add('ai-explore', () => <AiExplorePanel runEndpoint={a.runEndpoint} defaultStartUrl={a.defaultStartUrl} defaultGoal={a.defaultGoal} models={a.models} />);
+  }
+  if (cfg.googlePageSpeed) {
+    const g = cfg.googlePageSpeed;
+    add('google-pagespeed', () => (
+      <GooglePageSpeedPanel
+        runEndpoint={g.runEndpoint}
+        resultsEndpoint={g.resultsEndpoint}
+        urlsEndpoint={g.urlsEndpoint}
+        defaultUrl={g.defaultUrl}
+        defaultStrategy={g.defaultStrategy}
+      />
+    ));
   }
   if (cfg.chaosDesktop) {
     const cd = cfg.chaosDesktop;
