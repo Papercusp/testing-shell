@@ -72,6 +72,26 @@ async function readEventStream(res: Response, onEvent: (type: string, data: Reco
   }
 }
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+    >
+      {done ? 'Copied ✓' : label}
+    </button>
+  );
+}
+
 export default function ClaudeSeoPanel({ runEndpoint, resultsEndpoint, urlsEndpoint, defaultUrl, defaultCommand = 'page' }: ClaudeSeoPanelProps) {
   const [url, setUrl] = useState(defaultUrl);
   const [command, setCommand] = useState<SeoCommand>(defaultCommand);
@@ -224,6 +244,9 @@ export default function ClaudeSeoPanel({ runEndpoint, resultsEndpoint, urlsEndpo
                   {delta > 0 ? '▲' : '▼'} {Math.abs(delta)} vs previous
                 </div>
               )}
+            </div>
+            <div style={{ marginLeft: 'auto' }}>
+              <CopyButton text={shown.report} label="Copy report (for an agent)" />
             </div>
           </div>
           <pre style={{ maxHeight: 460, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#fafafa', border: '1px solid #e5e7eb', padding: 12, fontSize: 12, borderRadius: 6, lineHeight: 1.5 }}>

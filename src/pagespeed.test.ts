@@ -19,6 +19,7 @@ function summary(over: { categories?: Partial<PageSpeedSummary['categories']>; m
     },
     fieldData: null,
     opportunities: [],
+    findings: [],
     reportUrl: 'https://pagespeed.web.dev/analysis?url=x&form_factor=mobile',
   };
 }

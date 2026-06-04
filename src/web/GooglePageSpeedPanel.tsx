@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   computeMetricDeltas,
+  formatFindingsMarkdown,
   type MetricDelta,
   type MetricKey,
   type PageSpeedRecord,
@@ -283,6 +284,26 @@ const LAB_ROWS: Array<[keyof PageSpeedSummary['metrics'], string]> = [
   ['tti', 'TTI'],
 ];
 
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+    >
+      {done ? 'Copied ✓' : label}
+    </button>
+  );
+}
+
 function PageSpeedResult({
   summary,
   deltas,
@@ -335,6 +356,35 @@ function PageSpeedResult({
             {summary.opportunities.map((o) => (
               <li key={o.id}>
                 {o.title} — <strong>{o.displayValue}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {summary.findings && summary.findings.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 6px' }}>
+            <h4 style={{ margin: 0 }}>Findings — {summary.findings.length} (fixes for an agent)</h4>
+            <CopyButton text={formatFindingsMarkdown(summary)} label="Copy for agent" />
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {summary.findings.slice(0, 12).map((f) => (
+              <li key={f.id}>
+                <strong>[{f.category}] {f.title}</strong>
+                {f.savingsMs ? ` — ~${Math.round(f.savingsMs)} ms` : ''}
+                {f.displayValue ? ` (${f.displayValue})` : ''}
+                {f.items.length > 0 && (
+                  <ul style={{ margin: '2px 0', paddingLeft: 16, color: '#6b7280' }}>
+                    {f.items.slice(0, 4).map((it, i) => (
+                      <li key={i} style={{ wordBreak: 'break-all' }}>
+                        {it.url ?? it.selector ?? it.snippet ?? it.label ?? ''}
+                        {typeof it.wastedBytes === 'number' ? ` — ${Math.round(it.wastedBytes / 1024)} KB` : ''}
+                        {typeof it.wastedMs === 'number' ? ` — ${Math.round(it.wastedMs)} ms` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

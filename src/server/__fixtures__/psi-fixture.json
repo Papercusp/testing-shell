@@ -14,10 +14,17 @@
     "requestedUrl": "https://shop.buyrestart.com/",
     "finalUrl": "https://shop.buyrestart.com/",
     "categories": {
-      "performance": { "score": 0.8 },
-      "accessibility": { "score": 0.95 },
-      "best-practices": { "score": 1 },
-      "seo": { "score": 0.92 }
+      "performance": {
+        "score": 0.8,
+        "auditRefs": [
+          { "id": "uses-optimized-images", "weight": 0, "group": "diagnostics" },
+          { "id": "render-blocking-resources", "weight": 0, "group": "diagnostics" },
+          { "id": "unused-javascript", "weight": 0, "group": "diagnostics" }
+        ]
+      },
+      "accessibility": { "score": 0.95, "auditRefs": [{ "id": "label-content-name-mismatch", "weight": 0 }] },
+      "best-practices": { "score": 1, "auditRefs": [] },
+      "seo": { "score": 0.92, "auditRefs": [{ "id": "is-crawlable", "weight": 1 }] }
     },
     "audits": {
       "largest-contentful-paint": { "id": "largest-contentful-paint", "numericValue": 3800.5, "displayValue": "3.8 s" },
@@ -29,24 +36,52 @@
       "uses-optimized-images": {
         "id": "uses-optimized-images",
         "title": "Efficiently encode images",
+        "description": "Optimized images load faster. [Learn more](https://web.dev/uses-optimized-images/).",
+        "score": 0,
+        "scoreDisplayMode": "metricSavings",
         "displayValue": "Est savings of 2.1 s",
-        "details": { "type": "opportunity", "overallSavingsMs": 2100 }
+        "details": { "type": "opportunity", "overallSavingsMs": 2100, "items": [{ "url": "https://img.example/a.png", "wastedBytes": 307200 }] }
       },
       "render-blocking-resources": {
         "id": "render-blocking-resources",
         "title": "Eliminate render-blocking resources",
+        "description": "Resources are blocking the first paint of your page. [Learn more](https://web.dev/render-blocking-resources/).",
+        "score": 0,
+        "scoreDisplayMode": "metricSavings",
         "displayValue": "Est savings of 1.2 s",
-        "details": { "type": "opportunity", "overallSavingsMs": 1200 }
+        "details": { "type": "opportunity", "overallSavingsMs": 1200, "items": [{ "url": "https://shop.buyrestart.com/_astro/Layout.css", "wastedMs": 816, "totalBytes": 51200 }] }
       },
       "unused-javascript": {
         "id": "unused-javascript",
         "title": "Reduce unused JavaScript",
+        "description": "Reduce unused JavaScript to decrease bytes consumed by network activity. [Learn more](https://web.dev/unused-javascript/).",
+        "score": 0,
+        "scoreDisplayMode": "metricSavings",
         "displayValue": "Est savings of 0.5 s",
-        "details": { "type": "opportunity", "overallSavingsMs": 500 }
+        "details": { "type": "opportunity", "overallSavingsMs": 500, "items": [{ "url": "https://js.stripe.com/v3/", "wastedBytes": 175286, "totalBytes": 200000 }] }
+      },
+      "is-crawlable": {
+        "id": "is-crawlable",
+        "title": "Page is blocked from indexing",
+        "description": "Search engines are unable to include your pages in search results if they don't have permission to crawl them. [Learn more](https://web.dev/is-crawlable/).",
+        "score": 0,
+        "scoreDisplayMode": "binary",
+        "displayValue": "",
+        "details": { "type": "table", "items": [] }
+      },
+      "label-content-name-mismatch": {
+        "id": "label-content-name-mismatch",
+        "title": "Elements with visible text labels do not have matching accessible names.",
+        "description": "Visible text labels that do not match the accessible name can confuse screen-reader users. [Learn more](https://dequeuniversity.com/rules/axe/label-content-name-mismatch).",
+        "score": 0,
+        "scoreDisplayMode": "binary",
+        "displayValue": "",
+        "details": { "type": "table", "items": [{ "node": { "snippet": "<button>Add to cart</button>", "selector": "button.add", "nodeLabel": "Add to cart" } }] }
       },
       "uses-long-cache-ttl": {
         "id": "uses-long-cache-ttl",
         "title": "Serve static assets with an efficient cache policy",
+        "scoreDisplayMode": "informative",
         "displayValue": "0 resources found",
         "details": { "type": "table" }
       }

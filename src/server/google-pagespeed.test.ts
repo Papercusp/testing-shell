@@ -6,6 +6,7 @@ import {
   summarizePageSpeed,
   runPageSpeed,
   isPubliclyFetchable,
+  formatFindingsMarkdown,
 } from './google-pagespeed';
 
 const raw = JSON.parse(readFileSync(join(__dirname, '__fixtures__/psi-fixture.json'), 'utf-8'));
@@ -72,6 +73,44 @@ describe('summarizePageSpeed', () => {
   it('carries the analysis timestamp + final URL', () => {
     expect(s.fetchedAt).toBe('2026-06-03T12:00:00.000Z');
     expect(s.finalUrl).toBe('https://shop.buyrestart.com/');
+  });
+});
+
+describe('findings (agent-actionable)', () => {
+  const s = summarizePageSpeed(raw, 'mobile');
+  it('extracts failing audits across categories, prioritized by savings', () => {
+    // savings-first (2100, 1200, 500), then the two zero-savings audits in category order (a11y before seo)
+    expect(s.findings.map((f) => f.id)).toEqual([
+      'uses-optimized-images',
+      'render-blocking-resources',
+      'unused-javascript',
+      'label-content-name-mismatch',
+      'is-crawlable',
+    ]);
+    expect(s.findings[0].savingsMs).toBe(2100);
+  });
+  it('distills details.items (url/wastedBytes + node snippet/selector/label)', () => {
+    const uj = s.findings.find((f) => f.id === 'unused-javascript')!;
+    expect(uj.items[0]).toMatchObject({ url: 'https://js.stripe.com/v3/', wastedBytes: 175286 });
+    const lc = s.findings.find((f) => f.id === 'label-content-name-mismatch')!;
+    expect(lc.category).toBe('a11y');
+    expect(lc.items[0]).toMatchObject({ snippet: '<button>Add to cart</button>', selector: 'button.add', label: 'Add to cart' });
+  });
+  it('tags category + carries fix guidance, skips informative audits', () => {
+    expect(s.findings.find((f) => f.id === 'is-crawlable')!.category).toBe('seo');
+    expect(s.findings.find((f) => f.id === 'is-crawlable')!.description).toContain('permission to crawl');
+    expect(s.findings.find((f) => f.id === 'uses-long-cache-ttl')).toBeUndefined(); // informative → not a finding
+  });
+});
+
+describe('formatFindingsMarkdown', () => {
+  const md = formatFindingsMarkdown(summarizePageSpeed(raw, 'mobile'));
+  it('renders a prioritized, item-level fix list', () => {
+    expect(md).toContain('PageSpeed findings');
+    expect(md).toContain('Reduce unused JavaScript');
+    expect(md).toContain('https://js.stripe.com/v3/');
+    expect(md).toContain('Page is blocked from indexing');
+    expect(md.indexOf('Efficiently encode images')).toBeLessThan(md.indexOf('Page is blocked from indexing'));
   });
 });
 

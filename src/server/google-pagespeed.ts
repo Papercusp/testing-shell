@@ -12,6 +12,8 @@
 import type {
   FieldData,
   FieldMetric,
+  Finding,
+  FindingItem,
   LabMetric,
   Opportunity,
   PageSpeedStrategy,
@@ -28,7 +30,74 @@ export type {
   FieldData,
   FieldMetric,
   Opportunity,
+  Finding,
+  FindingItem,
 } from '../pagespeed';
+export { formatFindingsMarkdown } from '../pagespeed';
+
+const CAT_LABEL: Record<string, string> = {
+  performance: 'perf',
+  accessibility: 'a11y',
+  'best-practices': 'bp',
+  seo: 'seo',
+};
+const FINDING_MODES = new Set(['binary', 'numeric', 'metricSavings']);
+
+function distillItems(items: unknown): FindingItem[] {
+  if (!Array.isArray(items)) return [];
+  const out: FindingItem[] = [];
+  for (const raw of items.slice(0, 8)) {
+    const it = raw as Record<string, any>;
+    const node = it.node as Record<string, any> | undefined;
+    const fi: FindingItem = {};
+    if (typeof it.url === 'string') fi.url = it.url;
+    if (typeof it.wastedBytes === 'number') fi.wastedBytes = it.wastedBytes;
+    if (typeof it.wastedMs === 'number') fi.wastedMs = it.wastedMs;
+    if (node && typeof node === 'object') {
+      if (typeof node.snippet === 'string') fi.snippet = node.snippet;
+      if (typeof node.selector === 'string') fi.selector = node.selector;
+      if (typeof node.nodeLabel === 'string') fi.label = node.nodeLabel;
+    }
+    if (Object.keys(fi).length) out.push(fi);
+  }
+  return out;
+}
+
+function findingImpact(f: Finding): number {
+  if (typeof f.savingsMs === 'number') return f.savingsMs;
+  return Math.max(0, ...f.items.map((i) => i.wastedMs ?? 0));
+}
+
+/** Distill failing/imperfect audits across all categories into prioritized, agent-actionable findings. */
+function buildFindings(lr: Record<string, any>): Finding[] {
+  const audits = (lr.audits ?? {}) as Record<string, any>;
+  const cats = (lr.categories ?? {}) as Record<string, any>;
+  const out: Finding[] = [];
+  const seen = new Set<string>();
+  for (const [ck, c] of Object.entries(cats)) {
+    for (const ref of (c?.auditRefs ?? []) as Array<{ id: string }>) {
+      const a = audits[ref.id];
+      if (!a || seen.has(a.id)) continue;
+      const sc = a.score;
+      if (typeof sc !== 'number' || sc >= 0.9) continue; // passing / N/A → skip
+      if (!FINDING_MODES.has(a.scoreDisplayMode)) continue; // informative/manual → skip
+      seen.add(a.id);
+      const det = (a.details ?? {}) as Record<string, any>;
+      out.push({
+        id: a.id,
+        title: typeof a.title === 'string' ? a.title : a.id,
+        description: typeof a.description === 'string' ? a.description : '',
+        category: CAT_LABEL[ck] ?? ck,
+        score: sc,
+        displayValue: typeof a.displayValue === 'string' ? a.displayValue : '',
+        savingsMs: typeof det.overallSavingsMs === 'number' ? det.overallSavingsMs : null,
+        items: distillItems(det.items),
+      });
+    }
+  }
+  out.sort((x, y) => findingImpact(y) - findingImpact(x) || (x.score ?? 0) - (y.score ?? 0));
+  return out.slice(0, 25);
+}
 
 export interface PageSpeedConfig {
   url: string;
@@ -172,6 +241,7 @@ export function summarizePageSpeed(raw: unknown, strategy: PageSpeedStrategy): P
     },
     fieldData,
     opportunities,
+    findings: buildFindings(lr),
     reportUrl: `https://pagespeed.web.dev/analysis?url=${encodeURIComponent(finalUrl)}&form_factor=${strategy}`,
   };
 }
