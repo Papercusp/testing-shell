@@ -27,8 +27,12 @@ export type TurnErrorClass =
 
 /**
  * Structural subset of the host agent's `TurnError`. Only the fields the
- * error-handling here actually reads are required; a host's wider object is
- * assignable. `provider`/`retryable`/etc. are accepted but optional.
+ * error-handling here actually reads are required; a host's wider object (with
+ * extra fields like `provider`) is assignable without a cast. We deliberately
+ * do NOT declare an index signature — `[k: string]: unknown` would make a host
+ * `interface TurnError` (which has none) fail to assign ("index signature
+ * missing"), the opposite of the intent. Excess host fields are tolerated by
+ * normal structural assignment anyway.
  */
 export interface TurnError {
   class: TurnErrorClass;
@@ -39,8 +43,6 @@ export interface TurnError {
   resetAt?: number;
   /** Convenience: is this class worth another attempt (with the right wait)? */
   retryable?: boolean;
-  /** Host-specific extras are tolerated. */
-  [k: string]: unknown;
 }
 
 export class LlmCallError extends Error {
