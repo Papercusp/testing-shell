@@ -23,6 +23,8 @@ import ChaosWebPanel from '../web/ChaosWebPanel';
 import AiExplorePanel, { type AiExploreModelOption } from '../web/AiExplorePanel';
 import GooglePageSpeedPanel from '../web/GooglePageSpeedPanel';
 import { type PageSpeedStrategy } from '../pagespeed';
+import ClaudeSeoPanel from '../web/ClaudeSeoPanel';
+import { type SeoCommand } from '../seo';
 import ChaosDesktopPanel from '../desktop/ChaosDesktopPanel';
 
 export interface UniversalTestingConfig {
@@ -38,6 +40,8 @@ export interface UniversalTestingConfig {
   aiExplore?: { runEndpoint: string; defaultStartUrl: string; defaultGoal?: string; models?: AiExploreModelOption[] };
   /** Google PageSpeed Insights (Lighthouse) against a public URL. Omit → no PageSpeed tab. */
   googlePageSpeed?: { runEndpoint: string; resultsEndpoint?: string; urlsEndpoint?: string; defaultUrl: string; defaultStrategy?: PageSpeedStrategy };
+  /** Claude SEO — agentic claude-seo skill audit against a public URL. Omit → no Claude SEO tab. */
+  claudeSeo?: { runEndpoint: string; resultsEndpoint?: string; urlsEndpoint?: string; defaultUrl: string; defaultCommand?: SeoCommand };
   /** In-app perf-recorder chaos (desktop). The host must mount <RecorderHost> at recorderUrl. Omit → no Chaos (desktop) tab. */
   chaosDesktop?: { recorderUrl?: string; defaultRoute?: string; blocklist?: string; durations?: Record<string, number> };
 }
@@ -81,6 +85,18 @@ export function buildUniversalTesting(cfg: UniversalTestingConfig): UniversalTes
         urlsEndpoint={g.urlsEndpoint}
         defaultUrl={g.defaultUrl}
         defaultStrategy={g.defaultStrategy}
+      />
+    ));
+  }
+  if (cfg.claudeSeo) {
+    const cs = cfg.claudeSeo;
+    add('claude-seo', () => (
+      <ClaudeSeoPanel
+        runEndpoint={cs.runEndpoint}
+        resultsEndpoint={cs.resultsEndpoint}
+        urlsEndpoint={cs.urlsEndpoint}
+        defaultUrl={cs.defaultUrl}
+        defaultCommand={cs.defaultCommand}
       />
     ));
   }

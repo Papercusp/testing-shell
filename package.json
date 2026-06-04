@@ -42,6 +42,11 @@
       "import": "./src/server/google-pagespeed-routes.ts",
       "default": "./src/server/google-pagespeed-routes.ts"
     },
+    "./server/claude-seo-routes": {
+      "types": "./src/server/claude-seo-routes.ts",
+      "import": "./src/server/claude-seo-routes.ts",
+      "default": "./src/server/claude-seo-routes.ts"
+    },
     "./web/chaos-runner": {
       "default": "./src/web/chaos-runner.mjs"
     },

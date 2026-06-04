@@ -61,4 +61,14 @@ describe('buildUniversalTesting', () => {
     const { tabs } = buildUniversalTesting({ liveObserver: true });
     expect(tabs.find((t) => t.id === 'google-pagespeed')).toBeUndefined();
   });
+
+  it('emits a Claude SEO tab (web) + customTab when configured', () => {
+    const { tabs, customTabs } = buildUniversalTesting({
+      claudeSeo: { runEndpoint: '/api/claude-seo/run', defaultUrl: 'https://shop.buyrestart.com' },
+    });
+    const tab = tabs.find((t) => t.id === 'claude-seo')!;
+    expect(tab.label).toBe('Claude SEO');
+    expect(tab.platform).toBe('web');
+    expect(typeof customTabs['claude-seo']).toBe('function');
+  });
 });

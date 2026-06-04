@@ -18,3 +18,4 @@ export * from './k6';
 export * from './chaos';
 export * from './ai-explore';
 export * from './google-pagespeed';
+export * from './claude-seo';
