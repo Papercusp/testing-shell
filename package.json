@@ -1,5 +1,6 @@
 {
   "name": "@papercusp/testing-shell",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
   "description": "Shared testing-domains registry + UI shell. Consumed by /admin/testing (operator-vite) and the harness Tests tab (operator). Registry is pure data; the panel/shell take an injected dataSource so the same component drives both the admin and harness API surfaces.",

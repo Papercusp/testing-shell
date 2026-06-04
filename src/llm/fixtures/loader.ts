@@ -63,7 +63,7 @@ export function loadFixtureTurns(filePaths: string[]): TurnResult[] {
  * with or without the `.sse` suffix.
  */
 export function resolveFixturePath(fixtureId: string): string {
-  const here = resolve(__dirname);
+  const here = resolve(import.meta.dirname);
   const id = fixtureId.endsWith('.sse') ? fixtureId : `${fixtureId}.sse`;
   return resolve(here, 'operator', id);
 }
