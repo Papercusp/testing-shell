@@ -23,6 +23,8 @@ export interface ClaudeSeoRoutesConfig {
   getClaudeBin?: () => string | undefined;
   cwd?: string;
   timeoutMs?: number;
+  /** OS sandbox launcher prefix (e.g. bubblewrap argv) — contains the prompt-injectable agent. */
+  sandboxArgv?: string[];
   /** Returns false when the runner can't run here (e.g. prod, no login) → /run 503s clearly. */
   isAvailable?: () => boolean;
   store?: ClaudeSeoStore;
@@ -58,6 +60,7 @@ export function createClaudeSeoHonoRoutes(cfg: ClaudeSeoRoutesConfig): Hono {
       claudeBin: cfg.getClaudeBin?.(),
       cwd: cfg.cwd,
       timeoutMs: cfg.timeoutMs,
+      sandboxArgv: cfg.sandboxArgv,
     });
 
     // Tee: forward frames to the client unchanged, capture report+score, persist on flush.

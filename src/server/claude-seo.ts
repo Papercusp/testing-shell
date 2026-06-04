@@ -63,6 +63,28 @@ export interface ClaudeSeoRunOpts {
   spawnImpl?: typeof nodeSpawn;
   /** Kill the run after this many ms (best-effort). */
   timeoutMs?: number;
+  /**
+   * Sandbox launcher prefix (e.g. bubblewrap argv) prepended to the claude
+   * command. SECURITY: claude-seo fetches an attacker-controllable URL and runs
+   * with bypassed permissions, so it is prompt-injectable — the consumer should
+   * pass an OS sandbox (read-only host, writable scratch only, no secret env/files).
+   */
+  sandboxArgv?: string[];
+}
+
+/**
+ * Minimal env for the child — NOT the parent's process.env. claude-seo authenticates
+ * via the symlinked creds file in homeDir, so it needs no parent secrets; passing the
+ * full env would expose DATABASE_URL / API keys etc. to a prompt-injectable agent.
+ */
+const SAFE_ENV_KEYS = ['PATH', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TZ', 'TMPDIR'];
+function scrubbedEnv(homeDir: string): Record<string, string> {
+  const env: Record<string, string> = { HOME: homeDir, NODE_OPTIONS: '' };
+  for (const k of SAFE_ENV_KEYS) {
+    const v = process.env[k];
+    if (v) env[k] = v;
+  }
+  return env;
 }
 
 const enc = new TextEncoder();
@@ -91,8 +113,8 @@ function assistantLines(msg: unknown): string[] {
  */
 export function spawnClaudeSeoStream(cfg: ClaudeSeoConfig, opts: ClaudeSeoRunOpts): ReadableStream<Uint8Array> {
   const spawn = opts.spawnImpl ?? nodeSpawn;
-  const bin = opts.claudeBin ?? 'claude';
-  const args = [
+  const claudeArgv = [
+    opts.claudeBin ?? 'claude',
     '-p',
     `/seo ${cfg.command} ${cfg.url}`,
     '--permission-mode',
@@ -101,6 +123,10 @@ export function spawnClaudeSeoStream(cfg: ClaudeSeoConfig, opts: ClaudeSeoRunOpt
     'stream-json',
     '--verbose',
   ];
+  // Run inside the sandbox launcher when provided (contains the prompt-injectable agent).
+  const argv = opts.sandboxArgv?.length ? [...opts.sandboxArgv, ...claudeArgv] : claudeArgv;
+  const bin = argv[0];
+  const args = argv.slice(1);
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -109,7 +135,7 @@ export function spawnClaudeSeoStream(cfg: ClaudeSeoConfig, opts: ClaudeSeoRunOpt
         child = spawn(bin, args, {
           cwd: opts.cwd ?? opts.homeDir,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: { ...process.env, HOME: opts.homeDir, NODE_OPTIONS: '' },
+          env: scrubbedEnv(opts.homeDir),
         });
       } catch (e) {
         controller.enqueue(sseFrame('error', { message: `failed to spawn ${bin}: ${String(e)}` }));

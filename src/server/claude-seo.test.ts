@@ -80,6 +80,27 @@ describe('spawnClaudeSeoStream', () => {
     expect(done?.data.costUsd).toBe(0.12);
   });
 
+  it('scrubs secrets from the child env and applies a sandbox prefix', async () => {
+    process.env.SECRET_TEST_XYZ = 'shh';
+    let captured: { bin?: string; args?: string[]; env?: Record<string, string> } = {};
+    let child!: ReturnType<typeof fakeChild>;
+    const spawnImpl = ((bin: string, args: string[], o: { env?: Record<string, string> }) => {
+      captured = { bin, args, env: o.env };
+      child = fakeChild();
+      return child as never;
+    }) as never;
+    const stream = spawnClaudeSeoStream({ command: 'page', url: 'https://shop.buyrestart.com/' }, { homeDir: '/iso', sandboxArgv: ['bwrap', '--unshare-all'], spawnImpl });
+    child.emit('exit', 0);
+    await drain(stream);
+    expect(captured.bin).toBe('bwrap');
+    expect(captured.args?.slice(0, 3)).toEqual(['--unshare-all', 'claude', '-p']);
+    expect(captured.env?.HOME).toBe('/iso');
+    expect(captured.env?.PATH).toBeTruthy();
+    expect(captured.env?.SECRET_TEST_XYZ).toBeUndefined(); // parent secrets NOT passed
+    expect('DATABASE_URL' in (captured.env ?? {})).toBe(false);
+    delete process.env.SECRET_TEST_XYZ;
+  });
+
   it('falls back to accumulated text as the report when no result event (process exit)', async () => {
     let child!: ReturnType<typeof fakeChild>;
     const spawnImpl = ((..._a: unknown[]) => {
