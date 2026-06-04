@@ -1,5 +1,5 @@
 import { registerEvaluator } from './index';
-import type { ContinueChainRow, Violation } from '../types';
+import type { ContinueChainRow } from '../types';
 
 /**
  * Auto-fire detection — derives from the operator_continue_chains

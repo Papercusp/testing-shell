@@ -27,6 +27,11 @@
       "import": "./src/glob.ts",
       "default": "./src/glob.ts"
     },
+    "./llm": {
+      "types": "./src/llm/index.ts",
+      "import": "./src/llm/index.ts",
+      "default": "./src/llm/index.ts"
+    },
     "./server": {
       "types": "./src/server/index.ts",
       "import": "./src/server/index.ts",
