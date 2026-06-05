@@ -63,4 +63,5 @@ export const UNIVERSAL_PANEL_DOMAINS: Record<string, UniversalPanelDomain> = {
   'google-pagespeed': { id: 'google-pagespeed', label: 'Google PageSpeed', description: 'Lighthouse scores via the PageSpeed Insights API', tier: 'universal', platform: 'web' },
   'claude-seo': { id: 'claude-seo', label: 'Claude SEO', description: 'Agentic SEO audit via the claude-seo Claude Code skill', tier: 'universal', platform: 'web' },
   'chaos-desktop': { id: 'chaos-desktop', label: 'Chaos (desktop)', description: 'in-app perf-recorder clicker (Tauri)', tier: 'universal', platform: 'desktop' },
+  llm: { id: 'llm', label: 'LLM', description: 'scenario-driven LLM evaluation (sim-user → SUT → judge)', tier: 'universal' },
 };

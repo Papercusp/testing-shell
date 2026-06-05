@@ -32,6 +32,28 @@ describe('buildUniversalTesting', () => {
     expect(customTabs.routes).toBeUndefined();
   });
 
+  it('emits an agnostic llm tab + customTab when llm config is present, neither when omitted', () => {
+    const without = buildUniversalTesting({ load: { scriptsEndpoint: '/s', runEndpoint: '/run', stopEndpoint: '/stop', resultsEndpoint: '/res' } });
+    expect(without.tabs.find((t) => t.id === 'llm')).toBeUndefined();
+    expect(without.customTabs.llm).toBeUndefined();
+
+    const { tabs, customTabs } = buildUniversalTesting({
+      llm: {
+        scenariosEndpoint: '/api/admin/llm-tests/scenarios',
+        runsEndpoint: '/api/admin/llm-tests/runs',
+        runDetailEndpoint: '/api/admin/llm-tests/runs',
+        findingsEndpoint: '/api/admin/llm-tests/findings',
+        credentialsEndpoint: '/api/credentials',
+      },
+    });
+    const llm = tabs.find((t) => t.id === 'llm')!;
+    expect(llm).toBeTruthy();
+    expect(llm.label).toBe('LLM');
+    expect(llm.platform).toBeUndefined(); // agnostic — no platform tag
+    expect(llm.tier).toBe('universal');
+    expect(typeof customTabs.llm).toBe('function');
+  });
+
   it('wires live-web (agnostic) + ai-explore (web) panels that actually mount', () => {
     const { tabs, customTabs } = buildUniversalTesting({
       liveObserver: true,

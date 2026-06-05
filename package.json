@@ -1,5 +1,6 @@
 {
   "name": "@papercusp/testing-shell",
+  "type": "module",
   "version": "0.0.1",
   "private": true,
   "description": "Shared testing-domains registry + UI shell. Consumed by /admin/testing (operator-vite) and the harness Tests tab (operator). Registry is pure data; the panel/shell take an injected dataSource so the same component drives both the admin and harness API surfaces.",
@@ -26,6 +27,11 @@
       "types": "./src/glob.ts",
       "import": "./src/glob.ts",
       "default": "./src/glob.ts"
+    },
+    "./llm": {
+      "types": "./src/llm/index.ts",
+      "import": "./src/llm/index.ts",
+      "default": "./src/llm/index.ts"
     },
     "./server": {
       "types": "./src/server/index.ts",

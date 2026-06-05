@@ -10,9 +10,9 @@
  * <DomainTestPanel> + the host's dataSource; the host registers the domain via
  * applyRoleGlobs(universalDomains, { endpoints: cfg.routes.globs })).
  *
- * NOTE: chaos-desktop (Phase 4) and llm (Phase 7) keys are added when those
- * panels land; this file imports React panels and so is NOT loaded by the
- * server-safe `./registry` entry.
+ * NOTE: chaos-desktop (Phase 4) and llm (Phase 7) panels are wired here; this
+ * file imports React panels and so is NOT loaded by the server-safe `./registry`
+ * entry.
  */
 import { type ReactElement } from 'react';
 import { type TestingShellTab } from '../TestingShell';
@@ -26,6 +26,7 @@ import { type PageSpeedStrategy } from '../pagespeed';
 import ClaudeSeoPanel from '../web/ClaudeSeoPanel';
 import { type SeoCommand } from '../seo';
 import ChaosDesktopPanel from '../desktop/ChaosDesktopPanel';
+import LlmTestPanel, { type LlmTestPanelProps } from '../llm/LlmTestPanel';
 
 export interface UniversalTestingConfig {
   /** Endpoint-test globs for the `routes` domain. Omit → no Routes tab. The host must also register the domain (applyRoleGlobs). */
@@ -44,6 +45,15 @@ export interface UniversalTestingConfig {
   claudeSeo?: { runEndpoint: string; resultsEndpoint?: string; urlsEndpoint?: string; defaultUrl: string; defaultCommand?: SeoCommand };
   /** In-app perf-recorder chaos (desktop). The host must mount <RecorderHost> at recorderUrl. Omit → no Chaos (desktop) tab. */
   chaosDesktop?: { recorderUrl?: string; defaultRoute?: string; blocklist?: string; durations?: Record<string, number> };
+  /**
+   * Scenario-driven LLM evaluation (sim-user → SUT → judge). Agnostic; every
+   * route is injected. Omit → no LLM tab. Operator route defaults:
+   * scenariosEndpoint `/api/admin/llm-tests/scenarios`, runsEndpoint +
+   * runDetailEndpoint `/api/admin/llm-tests/runs` (detail is `${base}/${id}`),
+   * findingsEndpoint `/api/admin/llm-tests/findings`, credentialsEndpoint
+   * `/api/credentials`.
+   */
+  llm?: LlmTestPanelProps;
 }
 
 export interface UniversalTesting {
@@ -104,6 +114,7 @@ export function buildUniversalTesting(cfg: UniversalTestingConfig): UniversalTes
     const cd = cfg.chaosDesktop;
     add('chaos-desktop', () => <ChaosDesktopPanel recorderUrl={cd.recorderUrl} defaultRoute={cd.defaultRoute} blocklist={cd.blocklist} durations={cd.durations} />);
   }
+  if (cfg.llm) add('llm', () => <LlmTestPanel {...cfg.llm!} />);
 
   return { tabs, customTabs };
 }
