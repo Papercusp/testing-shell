@@ -13,36 +13,15 @@
  */
 
 // =============================================================================
-// Pricing (USD per 1M tokens) — kept exported for callers that estimate
-// cost ahead of a call. A host's concrete `llmCall` backend should compute
-// per-call cost from this same table; keep them in sync.
+// Pricing — re-exported from the canonical table in @papercusp/model-pricing
+// (cross-backend-cost-capture D-005: ONE price table; this module previously
+// carried its own copy, which drifted — opus 4.x list price is $5/$25, not
+// $15/$75). Vendor-prefixed ids ('openai-codex/gpt-5.5:xhigh') still resolve:
+// the canonical `priceFor` normalizes them to bare ids.
 // =============================================================================
 
-interface ModelPrice { in: number; out: number }
-export const MODEL_PRICES: Record<string, ModelPrice> = {
-  'claude-haiku-4-5':  { in: 0.80, out: 4.00 },
-  'claude-sonnet-4-6': { in: 3.00, out: 15.00 },
-  'claude-opus-4-7':   { in: 15.00, out: 75.00 },
-  'claude-opus-4-8':   { in: 15.00, out: 75.00 },
-  'openai-codex/gpt-5':         { in: 1.25, out: 10.00 },
-  'openai-codex/gpt-5.5':       { in: 2.50, out: 20.00 },
-  'openai-codex/gpt-5.5:xhigh': { in: 2.50, out: 20.00 },
-  // OpenAI direct models — used by hosts whose SUT/judge/sim run on OpenAI
-  // (e.g. Restart's Scout SUT is gpt-4o-mini). Per 1M tokens, USD.
-  'gpt-4o-mini':                { in: 0.15, out: 0.60 },
-  'gpt-4o':                     { in: 2.50, out: 10.00 },
-};
-
-function priceFor(model: string): ModelPrice {
-  if (MODEL_PRICES[model]) return MODEL_PRICES[model];
-  const prefix = Object.keys(MODEL_PRICES).find((m) => model.startsWith(m));
-  return prefix ? MODEL_PRICES[prefix] : { in: 0, out: 0 };
-}
-
-export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = priceFor(model);
-  return (inputTokens * p.in + outputTokens * p.out) / 1_000_000;
-}
+export { MODEL_PRICES, estimateCost } from '@papercusp/model-pricing';
+export type { ModelPrice } from '@papercusp/model-pricing';
 
 // =============================================================================
 // One-shot completion shapes. The concrete implementation is injected via

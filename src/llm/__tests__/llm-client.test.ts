@@ -58,9 +58,10 @@ describe('isTemperatureDeprecatedError', () => {
 
 describe('estimateCost', () => {
   it('prices claude-opus-4-8 (the frozen gym judge model) — must not silently fall to $0', () => {
-    // 1M in + 1M out at $15/$75 per 1M = $90. A missing price entry would
-    // return 0 and quietly break the gym's deterministic cost guardrail.
-    expect(estimateCost('claude-opus-4-8', 1_000_000, 1_000_000)).toBeCloseTo(90, 5);
+    // 1M in + 1M out at $5/$25 per 1M = $30 (canonical @papercusp/model-pricing
+    // table; the old local copy carried a stale $15/$75). A missing price entry
+    // would return 0 and quietly break the gym's deterministic cost guardrail.
+    expect(estimateCost('claude-opus-4-8', 1_000_000, 1_000_000)).toBeCloseTo(30, 5);
   });
 
   it('still prices the existing models', () => {

@@ -53,6 +53,9 @@
   "scripts": {
     "test": "vitest run"
   },
+  "dependencies": {
+    "@papercusp/model-pricing": "*"
+  },
   "devDependencies": {
     "vitest": "^4.1.4"
   },
