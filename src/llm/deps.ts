@@ -13,7 +13,7 @@
  */
 
 import type { LlmCallOpts, LlmCallResult } from './llm-client';
-import type { ChatTarget, ContinueChainRow, ToolInvocationRow } from './types';
+import type { ChatTarget, ContinueChainRow, ScenarioSetup, ToolInvocationRow } from './types';
 // `import type` is erased at runtime → no runtime cycle with runner.ts.
 import type { RunReport } from './runner';
 
@@ -78,6 +78,26 @@ export interface ClaimStore {
 }
 
 /**
+ * Undo whatever `applySetup` seeded — called once per run in a finally,
+ * after the session closes, so seeded state never outlives its run even
+ * when the run errors. Must be idempotent-ish (a second call is a no-op
+ * or harmless).
+ */
+export type SetupCleanup = () => Promise<void>;
+
+/**
+ * Apply a scenario's `setup` block before the session opens (memory
+ * seeding, fixture rows, …) and return the cleanup that removes it.
+ * Optional — when absent, scenarios with `setup` run without seeding
+ * (the runner warns). The host owns ALL semantics: which store, which
+ * scopes, what `kind` maps to. Returning void means "nothing to clean".
+ */
+export type SetupApplier = (
+  setup: ScenarioSetup,
+  ctx: { runId: string },
+) => Promise<SetupCleanup | void>;
+
+/**
  * The full injected dependency bag for `runScenario`. Only `llmCall` +
  * `getTarget` are required; the rest are optional best-effort seams.
  */
@@ -94,4 +114,6 @@ export interface RunnerDeps {
   store?: LlmTestStore;
   /** Parallel-runner claim coordination; skipped when omitted. */
   claim?: ClaimStore;
+  /** Apply scenario.setup before the session opens; cleanup runs post-run. */
+  applySetup?: SetupApplier;
 }

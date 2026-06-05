@@ -248,3 +248,57 @@ function makeChainRow(over: Partial<ContinueChainRow> = {}): ContinueChainRow {
     ...over,
   };
 }
+
+describe('mem0_read / mem0_wrote tool-name matching', () => {
+  // The live operator memory tools are `memory:*` (neutral seam) — the
+  // matchers must catch every transport spelling of those AND the
+  // historical mem0-prefixed names (memory-backend-benchmark P-009).
+  const READ_SPELLINGS = [
+    'memory:search',
+    'memory_search',
+    'memory.search',
+    'mcp__agentmcp__memory:search',
+    'memory:list',
+    'mem0:recall',
+    'mem0_read',
+  ];
+  for (const name of READ_SPELLINGS) {
+    it(`mem0_read matches '${name}'`, () => {
+      const run = makeRun({ toolInvocations: [makeTi(name)] });
+      expect(evaluateAsserts([{ kind: 'mem0_read' }], run)).toHaveLength(0);
+    });
+  }
+
+  const WRITE_SPELLINGS = [
+    'memory:remember',
+    'memory_remember',
+    'mcp__agentmcp__memory:remember',
+    'memory:update',
+    'mem0:add',
+    'mem0_write',
+  ];
+  for (const name of WRITE_SPELLINGS) {
+    it(`mem0_wrote matches '${name}'`, () => {
+      const run = makeRun({ toolInvocations: [makeTi(name)] });
+      expect(evaluateAsserts([{ kind: 'mem0_wrote' }], run)).toHaveLength(0);
+    });
+  }
+
+  it('mem0_read does NOT match non-memory tools or memory writes', () => {
+    for (const name of ['harness:status', 'memory:remember', 'memorize:search', 'plans:search']) {
+      const run = makeRun({ toolInvocations: [makeTi(name)] });
+      expect(evaluateAsserts([{ kind: 'mem0_read' }], run)).toHaveLength(1);
+    }
+  });
+
+  it('mem0_wrote does NOT match reads or unrelated tools', () => {
+    for (const name of ['memory:search', 'harness:status', 'work_items:update']) {
+      const run = makeRun({ toolInvocations: [makeTi(name)] });
+      expect(evaluateAsserts([{ kind: 'mem0_wrote' }], run)).toHaveLength(1);
+    }
+  });
+
+  it('mem0_read errors when no tool invocations exist', () => {
+    expect(evaluateAsserts([{ kind: 'mem0_read' }], makeRun())).toHaveLength(1);
+  });
+});

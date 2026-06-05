@@ -207,7 +207,19 @@ export interface ScenarioSetup {
   /** Per-run seed data inserted before the conversation starts. */
   features?: unknown[];
   issues?: unknown[];
-  mem0?: Array<{ kind: 'user' | 'project' | 'feedback' | 'reference'; body: string }>;
+  /**
+   * Memory entries seeded through the host's memory backend before the
+   * session opens (and forgotten again after the run — the host's
+   * `RunnerDeps.applySetup` returns the cleanup). `scope` names the pool
+   * to seed in the host's own scope vocabulary (the operator uses
+   * `harness:<slug>`; omitted → the host's default seeding pool). Kept
+   * neutral here: the lib never interprets it.
+   */
+  mem0?: Array<{
+    kind: 'user' | 'project' | 'feedback' | 'reference';
+    body: string;
+    scope?: string;
+  }>;
 }
 
 export interface ScenarioTrigger {

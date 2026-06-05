@@ -31,6 +31,7 @@ import { resolvePersona } from './personas/traits';
 import { SimUser, type SimAction } from './sim-user';
 import type {
   CardEvent,
+  ChatSession,
   JudgeResult,
   Persona,
   RunSummary,
@@ -245,13 +246,35 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     }
   }
 
+  // Scenario setup (memory seeds, fixture rows) — applied BEFORE the session
+  // opens so pre-turn recall/injection sees it; the returned cleanup runs in
+  // the post-run finally so seeded state never outlives its run.
+  let setupCleanup: import('./deps').SetupCleanup | undefined;
+  if (scenario.setup) {
+    if (deps.applySetup) {
+      const c = await deps.applySetup(scenario.setup, { runId });
+      if (c) setupCleanup = c;
+    } else {
+      console.warn(
+        `[llm-testing] scenario '${scenario.id}' declares setup but no applySetup seam is injected — running UNSEEDED.`,
+      );
+    }
+  }
+
   const target = deps.getTarget(scenario.target);
-  const session = await target.open({
-    runId,
-    workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
-    transport: scenario.transport ?? 'http-sse',
-    dispatchOverride: scenario.toolOverride,
-  });
+  let session: ChatSession;
+  try {
+    session = await target.open({
+      runId,
+      workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
+      transport: scenario.transport ?? 'http-sse',
+      dispatchOverride: scenario.toolOverride,
+    });
+  } catch (err) {
+    // open() failed after setup applied — clean the seeds before rethrowing.
+    await runSetupCleanup(setupCleanup, scenario.id);
+    throw err;
+  }
 
   const simUser = new SimUser({
     persona,
@@ -399,6 +422,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     }
   } finally {
     await session.close();
+    await runSetupCleanup(setupCleanup, scenario.id);
   }
 
   const finishedAt = new Date();
@@ -586,6 +610,24 @@ function aggregate(scenario: Scenario, matrixGroupId: string | undefined, runs: 
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Run a setup cleanup, swallowing (but logging) failures — a cleanup
+ * error must never mask the run's own result/error.
+ */
+async function runSetupCleanup(
+  cleanup: import('./deps').SetupCleanup | undefined,
+  scenarioId: string,
+): Promise<void> {
+  if (!cleanup) return;
+  try {
+    await cleanup();
+  } catch (err) {
+    console.warn(
+      `[llm-testing] setup cleanup failed for '${scenarioId}': ${(err as Error).message} — seeded state may linger.`,
+    );
+  }
+}
 
 function readScenarioHash(filePath: string | undefined): string {
   if (!filePath) return computeScenarioHash('no-file-provided');

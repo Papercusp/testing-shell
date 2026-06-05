@@ -58,9 +58,21 @@ registerEvaluator('custom', (a, run) => {
   return a.eval(run);
 });
 
-// mem0 + spawn asserts — read from PG-side tool_invocations.
+// Memory + spawn asserts — read from PG-side tool_invocations.
+//
+// Tool-name matching covers BOTH the historical mem0-prefixed names and the
+// live neutral-seam names the operator actually exposes today
+// (`memory:remember` / `memory:search` / `memory:list` / `memory:forget` /
+// `memory:update`), in every transport spelling: plain (`memory:search`),
+// underscore (`memory_search`), dotted alias (`memory.search`), and the
+// MCP-prefixed form (`mcp__agentmcp__memory:search`). The original
+// `/mem0[:_]…/` patterns predated the tool naming and could never match a
+// real invocation (memory-backend-benchmark P-009).
+const MEMORY_WRITE_TOOL_RE = /(^|:|__|\.)mem(?:0|ory)[:_.](write|add|remember|update)/i;
+const MEMORY_READ_TOOL_RE = /(^|:|__|\.)mem(?:0|ory)[:_.](recall|read|search|list|get)/i;
+
 registerEvaluator('mem0_wrote', (a, run) => {
-  const writes = run.toolInvocations.filter((t) => /(^|:|__)mem0[:_].*(write|add|remember)/i.test(t.toolName));
+  const writes = run.toolInvocations.filter((t) => MEMORY_WRITE_TOOL_RE.test(t.toolName));
   if (writes.length === 0) {
     return [{
       assertKind: 'mem0_wrote',
@@ -91,7 +103,7 @@ registerEvaluator('mem0_wrote', (a, run) => {
 });
 
 registerEvaluator('mem0_read', (_a, run) => {
-  const reads = run.toolInvocations.filter((t) => /(^|:|__)mem0[:_].*(recall|read|search)/i.test(t.toolName));
+  const reads = run.toolInvocations.filter((t) => MEMORY_READ_TOOL_RE.test(t.toolName));
   if (reads.length === 0) {
     return [{
       assertKind: 'mem0_read',
