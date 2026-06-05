@@ -16,6 +16,7 @@
 /** Minimal classification of an LLM turn failure (a host may pass a superset). */
 export type TurnErrorClass =
   | 'rate_limited'
+  | 'usage_limit'
   | 'overloaded'
   | 'timeout'
   | 'transient_io'
@@ -64,12 +65,18 @@ export interface RateLimitInfo {
 }
 
 /**
- * If `e` is a rate-limited / overloaded turn error, return its reset hints (so the caller can
- * wait-until-reset and resume); otherwise null. `overloaded` (529/5xx) is included because it,
- * like a 429, is a transient backpressure the caller should wait out rather than score as a result.
+ * If `e` is a rate-limited / overloaded / usage-capped turn error, return its reset hints (so the
+ * caller can wait-until-reset and resume); otherwise null. `overloaded` (529/5xx) is included
+ * because it, like a 429, is transient backpressure to wait out rather than score. `usage_limit`
+ * (a plan/subscription cap) is included so an unattended loop pauses/skips on a cap instead of
+ * aborting — its reset is typically hours off, so the bounded-pause caller waits then rethrows,
+ * which records the run as rate-limited + excludes it (never a crash).
  */
 export function rateLimitInfo(e: unknown): RateLimitInfo | null {
-  if (e instanceof LlmCallError && (e.turn.class === 'rate_limited' || e.turn.class === 'overloaded')) {
+  if (
+    e instanceof LlmCallError &&
+    (e.turn.class === 'rate_limited' || e.turn.class === 'overloaded' || e.turn.class === 'usage_limit')
+  ) {
     return { resetAt: e.turn.resetAt, retryAfterMs: e.turn.retryAfterMs };
   }
   return null;
