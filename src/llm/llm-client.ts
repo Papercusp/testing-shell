@@ -27,6 +27,10 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
   'openai-codex/gpt-5':         { in: 1.25, out: 10.00 },
   'openai-codex/gpt-5.5':       { in: 2.50, out: 20.00 },
   'openai-codex/gpt-5.5:xhigh': { in: 2.50, out: 20.00 },
+  // OpenAI direct models — used by hosts whose SUT/judge/sim run on OpenAI
+  // (e.g. Restart's Scout SUT is gpt-4o-mini). Per 1M tokens, USD.
+  'gpt-4o-mini':                { in: 0.15, out: 0.60 },
+  'gpt-4o':                     { in: 2.50, out: 10.00 },
 };
 
 function priceFor(model: string): ModelPrice {
