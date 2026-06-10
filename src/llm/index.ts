@@ -65,6 +65,27 @@ export {
 // Tape-ordering helpers.
 export { findEventsAfter, deltaTextAfter } from './tape-ordering';
 
+// Compare/select runner + Scorer modes (test-gym P-002 + P-003).
+export {
+  BASELINE_ID,
+  compareArms,
+  runCompareSelect,
+  deterministicScorer,
+  judgeAxisScorer,
+  passRateScorer,
+  meanCostScorer,
+  meanLatencyScorer,
+  toolCallRateScorer,
+  type Scorer,
+  type ScorerDirection,
+  type CompareArm,
+  type CompareArmsOpts,
+  type CompareSelectOpts,
+  type CompareSelectResult,
+  type MetricDiff,
+  type RankedCandidate,
+} from './compare-select';
+
 // LLM-client generic helpers (pricing + JSON recovery + call shapes).
 export {
   MODEL_PRICES,
