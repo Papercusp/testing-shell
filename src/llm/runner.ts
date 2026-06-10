@@ -36,6 +36,7 @@ import type {
   Persona,
   RunSummary,
   Scenario,
+  ScenarioVariant,
   TurnInput,
   TurnResult,
   TurnTrigger,
@@ -57,6 +58,15 @@ export interface RunnerOpts {
   seed?: number;
   /** Path to scenario source file (for hashing). Optional but recommended. */
   scenarioFilePath?: string;
+  /**
+   * Eval variant knob (test-gym-apiary-framework-2026-06-09 P-001): run this
+   * scenario WITH the variant applied (prompt overlay / config delta) —
+   * injected at runtime, never a committed scenario file per idea. The target
+   * must declare `supportsVariants`; otherwise the run fails loudly (a
+   * silently-ignored variant would mislabel a baseline run as the candidate).
+   * Omit for the baseline run.
+   */
+  variant?: ScenarioVariant;
 }
 
 export interface RunReport {
@@ -161,6 +171,7 @@ export async function runScenario(
       matrixGroupId,
       matrixIndex: matrixGroupId ? i : undefined,
       ...(opts.seed !== undefined && { seed: opts.seed }),
+      ...(opts.variant !== undefined && { variant: opts.variant }),
     }, deps);
     runs.push(report);
   }
@@ -198,6 +209,8 @@ interface OnceArgs {
    * same trajectory (model-side nondeterminism still possible).
    */
   seed?: number;
+  /** Eval variant to apply (P-001) — see RunnerOpts.variant. */
+  variant?: ScenarioVariant;
 }
 
 async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunReport> {
@@ -262,6 +275,16 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   }
 
   const target = deps.getTarget(scenario.target);
+  // Variant gate (P-001): a target that can't APPLY the variant must not run
+  // it — a silently-ignored overlay/delta would label a baseline run as the
+  // candidate and an eval would compare baseline vs baseline.
+  if (args.variant && !target.supportsVariants) {
+    await runSetupCleanup(setupCleanup, scenario.id);
+    throw new Error(
+      `variant_unsupported: target '${target.id}' does not declare supportsVariants — ` +
+        `cannot apply variant '${args.variant.id}' (it would be silently ignored)`,
+    );
+  }
   let session: ChatSession;
   try {
     session = await target.open({
@@ -269,6 +292,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
       transport: scenario.transport ?? 'http-sse',
       dispatchOverride: scenario.toolOverride,
+      ...(args.variant !== undefined && { variant: args.variant }),
     });
   } catch (err) {
     // open() failed after setup applied — clean the seeds before rethrowing.
@@ -453,6 +477,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     judgeModel,
     personaId: persona.id,
     personaTraits: persona.traits,
+    ...(args.variant !== undefined && { variantId: args.variant.id }),
     workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
     transportMode: scenario.transport ?? 'http-sse',
     turns,

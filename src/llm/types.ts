@@ -25,11 +25,45 @@ export interface ChatTarget {
   readonly behaviors: string[];
 
   /**
+   * Variant-knob support (test-gym-apiary-framework-2026-06-09 P-001/D-001).
+   * A target that knows how to APPLY a {@link ScenarioVariant} (overlay the
+   * SUT prompt / apply the config delta) declares `true`. The runner REFUSES
+   * to run a variant against a target that doesn't — silently ignoring the
+   * variant would make an eval compare baseline vs baseline and report a
+   * fake "no difference".
+   */
+  readonly supportsVariants?: boolean;
+
+  /**
    * Open a new session. Returns an opaque session that the runner threads
    * through `send()` / `close()`. Per-target implementations decide how
    * to allocate conversation ids, workspace roots, etc.
    */
   open(opts: SessionOptions): Promise<ChatSession>;
+}
+
+/**
+ * The eval variant knob (test-gym-apiary-framework-2026-06-09 P-001).
+ *
+ * An eval = a registered scenario + a variant injected AT RUNTIME — a
+ * parameterized scenario, not a committed file per idea. The variant is the
+ * "candidate" a compare/select runner (P-002) runs against the baseline
+ * (no variant). Two delta shapes, both optional, composable:
+ *
+ *   - `promptOverlay` — text appended to the SUT's system prompt (e.g. a
+ *     Scout-proposed playbook/persona amendment under evaluation).
+ *   - `configDelta`  — target-interpreted config knobs (e.g. a different
+ *     SUT model, a blueprint knob). Each target documents the keys it
+ *     understands and MUST reject unknown keys loudly — a silently-dropped
+ *     knob is a baseline run mislabeled as the candidate.
+ */
+export interface ScenarioVariant {
+  /** Stable id stamped on the run ('baseline' is reserved for no-variant). */
+  id: string;
+  /** Appended to the SUT system prompt (after the target's base prompt). */
+  promptOverlay?: string;
+  /** Target-interpreted config knobs; unknown keys must fail the run. */
+  configDelta?: Record<string, unknown>;
 }
 
 export interface SessionOptions {
@@ -41,6 +75,11 @@ export interface SessionOptions {
   transport: 'in-process' | 'http-sse';
   /** Optional dispatcher override — see §10.4. */
   dispatchOverride?: ToolDispatchOverride;
+  /**
+   * Eval variant to apply to this session (P-001). Only delivered to targets
+   * declaring `supportsVariants` — the runner gates it.
+   */
+  variant?: ScenarioVariant;
 }
 
 export interface ChatSession {
@@ -323,6 +362,8 @@ export interface RunSummary {
   judgeModel: string;
   personaId: string;
   personaTraits: PersonaTraits;
+  /** Eval variant this run executed under (P-001); absent = baseline. */
+  variantId?: string;
   workspaceMode: 'isolated' | 'real';
   transportMode: 'in-process' | 'http-sse';
   turns: TurnResult[];
