@@ -38,7 +38,7 @@ describe('composePersonaPrompt', () => {
   });
 
   it('includes an upper-cased domain line only when a domain is set', () => {
-    expect(composePersonaPrompt(traits({ domain: 'finance' }))).toContain('FINANCE');
+    expect(composePersonaPrompt(traits({ domain: 'support' }))).toContain('SUPPORT');
     expect(composePersonaPrompt(traits())).not.toContain('domain background');
   });
 });
