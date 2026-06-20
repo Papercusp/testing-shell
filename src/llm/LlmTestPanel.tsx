@@ -20,7 +20,7 @@
  *
  * Domain/SUT-agnostic: the panel renders whatever scenarios/runs/findings the
  * injected backend returns. It imports nothing host-coupled (no @/lib/*, no
- * @papercusp/papercup-shared, no apps/operator). The framework severity /
+ * @papercusp/papercusp-shared, no apps/operator). The framework severity /
  * finding-source unions are reused from ../llm/types rather than redefined.
  */
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react';

@@ -8,7 +8,7 @@
  * host-specific capability — the LLM transport, the target registry, telemetry
  * pulls, the run-report store, the parallel-runner claim ledger — is injected
  * via `RunnerDeps` (see ./deps). This lib imports nothing host-coupled (no
- * operator, no @papercusp/papercup-shared, no Postgres, no @/lib/*).
+ * operator, no @papercusp/papercusp-shared, no Postgres, no @/lib/*).
  */
 
 // Core type graph (ChatTarget / ChatSession / Scenario / RunSummary / rubric / …).
