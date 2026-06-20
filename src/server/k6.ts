@@ -27,7 +27,8 @@ export interface K6ScriptMeta {
 
 export interface K6ResultMeta {
   id: string;
-  project?: string;
+  /** Persisted as an explicit `null` when no project was supplied (stable JSON shape). */
+  project?: string | null;
   scriptId: string;
   scriptName: string;
   startedAt: string;
@@ -207,7 +208,7 @@ export function runK6Stream(opts: RunK6Opts): ReadableStream<Uint8Array> {
               startedAt,
               exitCode,
               log: collectedLines,
-            } satisfies K6ResultMeta & { project: string | null }),
+            } satisfies K6ResultMeta),
             'utf-8',
           );
         } catch {
