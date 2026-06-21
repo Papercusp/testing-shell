@@ -20,6 +20,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 
 import { evaluateAsserts } from './asserts/index';
 import type { RunnerDeps } from './deps';
@@ -234,7 +235,14 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   // skipped entirely when absent (the lib has no ledger of its own).
   const skipClaim = process.env.PAPERCUSP_LLM_TEST_SKIP_CLAIM === '1' || !deps.claim;
   let claimKey: string | null = null;
-  const claimOwner = `${process.pid}/${runId.slice(0, 8)}`;
+  // `<host>:<pid>/<runId8>` — host:pid prefix so a crashed runner's claim is
+  // reapable by the dead-local-pid probe (operator ledger `holderIsDeadLocalPid`,
+  // EI-281) instead of blocking the scenario for the full TTL. The owner id was
+  // previously `<pid>/<runId8>` (no host, `/` separator), which the probe — it
+  // parses `<host>:<pid>` — could not recognize, so killed runs (timeout / 429
+  // exhaustion) stranded their claim until expiry. The `/runId8` suffix stays for
+  // traceability; the probe strips it before reading the pid.
+  const claimOwner = `${hostname()}:${process.pid}/${runId.slice(0, 8)}`;
   if (!skipClaim && deps.claim) {
     try {
       const claim = await deps.claim.tryClaim({
