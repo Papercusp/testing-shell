@@ -234,6 +234,12 @@ export interface Scenario {
   transport?: 'in-process' | 'http-sse';
   toolOverride?: ToolDispatchOverride;
   fixtures?: { sseTapePath?: string };
+  /**
+   * Compaction seam (P-006) — when set, the runner rewrites the wire history
+   * before {@link CompactionPolicy.beforeTurn} to simulate a compacted-away
+   * base snapshot. Omit for the normal full-history thread.
+   */
+  compactionPolicy?: CompactionPolicy;
 }
 
 export type GoalSpec =
@@ -268,6 +274,54 @@ export interface ScenarioTrigger {
   fire: TurnTrigger;
   /** Parameter (e.g. 30 for 'silence'). */
   param?: number;
+}
+
+/**
+ * Compaction seam (agent-tool-delta-protocol-2026-06-22 P-006 / D-008).
+ *
+ * The runner normally threads the FULL verbatim wire history into every
+ * `session.send` — there is no pruning, so "the base snapshot the model
+ * fetched earlier got compacted away" is not simulable, and base-eviction
+ * (the silent-wrong-merge hazard the delta protocol must retire) is
+ * untestable. A scenario sets `compactionPolicy` to faithfully model it:
+ * right before the designated turn the runner rewrites the wire history,
+ * replacing the leading `[0, upTo)` messages with a SINGLE lossy summary
+ * block. The rewrite is permanent (mirrors real compaction) — it persists
+ * for every later turn. After it, the verbatim base rows are gone, so a
+ * subsequent delta turn cannot be merged against an in-context base and the
+ * correct SUT behavior is to re-fetch full.
+ *
+ * NOTE on `summaryRole`: some in-process targets (the `su` target) DROP
+ * `role:'system'` messages from the wire history, so a `system` summary
+ * would vanish entirely (still a faithful eviction, just with no summary
+ * marker the model can see). Default `user` keeps the summary visible.
+ */
+export interface CompactionPolicy {
+  /**
+   * 0-indexed turn the compaction fires BEFORE (i.e. before that turn's
+   * user message is appended). Use a value ≥ 1 — there is nothing to
+   * compact before turn 0.
+   */
+  beforeTurn: number;
+  /**
+   * Replace wire messages `[0, upTo)` with the single summary block. Clamped
+   * to the current history length; `0` is a no-op. Choose it to evict the
+   * base-snapshot turn(s) while keeping any later exchange you want retained.
+   */
+  upTo: number;
+  /**
+   * The lossy summary text that replaces the dropped messages. Models a
+   * compaction that has paraphrased away the verbatim snapshot. Defaults to
+   * {@link DEFAULT_COMPACTION_SUMMARY}.
+   */
+  summary?: string;
+  /**
+   * Role for the inserted summary message. Defaults to `'user'` (a `system`
+   * summary is dropped by targets that filter system turns — see the note
+   * above; `assistant` would make the rewritten history start with an
+   * assistant turn).
+   */
+  summaryRole?: 'user' | 'assistant' | 'system';
 }
 
 // =============================================================================

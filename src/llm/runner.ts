@@ -33,6 +33,7 @@ import { SimUser, type SimAction } from './sim-user';
 import type {
   CardEvent,
   ChatSession,
+  CompactionPolicy,
   JudgeResult,
   Persona,
   RunSummary,
@@ -91,6 +92,38 @@ export interface SingleRunReport {
 
 const DEFAULT_SUT_MODEL = process.env.LLM_TEST_SUT_MODEL ?? 'claude-sonnet-4-6';
 const HAIKU_SIM_DEFAULT = 'claude-haiku-4-5';
+
+/**
+ * Default lossy block a {@link CompactionPolicy} inserts in place of the
+ * compacted-away turns. Deliberately states that prior verbatim data is gone
+ * and must be re-fetched — so a SUT that reads it has a fair, legible cue to
+ * fall back to a full re-fetch rather than hallucinate-merge a delta against a
+ * base it no longer holds.
+ */
+export const DEFAULT_COMPACTION_SUMMARY =
+  '[Earlier conversation compacted to save context. The verbatim details of ' +
+  'prior turns — including any data snapshots the assistant previously ' +
+  'retrieved — are no longer available here and must be re-fetched if needed.]';
+
+/**
+ * Apply a {@link CompactionPolicy} to a wire-message history (P-006). Pure:
+ * returns a NEW array with messages `[0, upTo)` replaced by a single lossy
+ * summary block; the tail `[upTo, …]` is preserved verbatim. `upTo` is clamped
+ * to `[0, length]`; an `upTo` of 0 is a no-op (returns a copy). The runner
+ * calls this once, right before `CompactionPolicy.beforeTurn`.
+ */
+export function applyCompaction(
+  messages: ReadonlyArray<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+  policy: CompactionPolicy,
+): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
+  const upTo = Math.max(0, Math.min(policy.upTo, messages.length));
+  if (upTo === 0) return messages.slice();
+  const summary = {
+    role: policy.summaryRole ?? 'user',
+    content: policy.summary ?? DEFAULT_COMPACTION_SUMMARY,
+  } as const;
+  return [summary, ...messages.slice(upTo)];
+}
 
 /**
  * Resolve the judge model when the caller doesn't pass one explicitly.
@@ -323,8 +356,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     | { who: 'sim'; action: SimAction }
     | { who: 'sut'; turn: TurnResult }
   > = [];
-  const wireMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+  // `let` (not `const`): the compaction seam (P-006) rebinds this to a
+  // rewritten history before the policy's designated turn.
+  let wireMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
   const capBreaches: string[] = [];
+  let compactionApplied = false;
 
   const maxTurns = scenario.caps.maxTurns;
   const maxWallSecs = scenario.caps.maxWallSecs;
@@ -373,6 +409,21 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
         capBreaches.push('cost');
         finishReason = 'cap_breach';
         break;
+      }
+
+      // Compaction seam (P-006): right before the designated turn — and BEFORE
+      // this turn's user message is appended — rewrite the wire history,
+      // collapsing the leading [0, upTo) messages into one lossy summary block.
+      // Faithfully simulates "the base snapshot the SUT fetched earlier was
+      // compacted away, then a delta turn arrives." The rewrite is permanent
+      // (real compaction never un-compacts), so it persists for later turns.
+      if (
+        scenario.compactionPolicy &&
+        !compactionApplied &&
+        turnIdx === scenario.compactionPolicy.beforeTurn
+      ) {
+        wireMessages = applyCompaction(wireMessages, scenario.compactionPolicy);
+        compactionApplied = true;
       }
 
       let trigger: TurnTrigger;
