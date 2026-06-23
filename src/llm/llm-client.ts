@@ -42,6 +42,14 @@ export interface LlmCallOpts {
    * exclusive on the provider API; the host backend decides how to reconcile.
    */
   thinkingBudgetTokens?: number;
+  /**
+   * Priority/role label for the host transport's inference-gateway admission
+   * tier (e.g. 'scout', 'queen', 'bee'). The operator host attaches it as the
+   * `x-papercusp-priority` header on the in-process anthropic-direct call so the
+   * pacing gateway tiers it correctly instead of dropping it in the lowest
+   * default band; omit for an untiered call. Ignored by hosts with no gateway.
+   */
+  priority?: string;
 }
 
 export interface LlmCallResult {
