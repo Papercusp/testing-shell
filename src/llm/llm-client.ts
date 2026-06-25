@@ -42,6 +42,8 @@ export interface LlmCallOpts {
    * exclusive on the provider API; the host backend decides how to reconcile.
    */
   thinkingBudgetTokens?: number;
+  /** Abort the host transport when an outer cycle/test timeout fires. */
+  signal?: AbortSignal;
   /**
    * Priority/role label for the host transport's inference-gateway admission
    * tier (e.g. 'scout', 'queen', 'bee'). The operator host attaches it as the
