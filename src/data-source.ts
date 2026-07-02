@@ -25,7 +25,10 @@ export interface FileHit {
 export type TestRunnerWire =
   | { kind: 'vitest'; filePath: string }
   | { kind: 'playwright'; filePath: string }
-  | { kind: 'cargo'; crate: string; test?: string }
+  // `manifestPath` (EI-1610): a standalone crate with no root Cargo.toml workspace
+  // can't be reached via `-p <crate>` from the repo root; point cargo at the crate's
+  // own manifest instead. Optional — omitted preserves the workspace `-p` path.
+  | { kind: 'cargo'; crate: string; test?: string; manifestPath?: string }
   | { kind: 'node'; cmd: string; args?: string[]; label?: string }
   | { kind: 'shell'; cmd: string; args?: string[]; label?: string }
   | { kind: 'k6'; script: string; vus?: number; duration?: string; category?: string }
