@@ -93,6 +93,50 @@ export interface SingleRunReport {
 const DEFAULT_SUT_MODEL = process.env.LLM_TEST_SUT_MODEL ?? 'claude-sonnet-4-6';
 const HAIKU_SIM_DEFAULT = 'claude-haiku-4-5';
 
+/** Fixed budget for the single post-loop judge call (EI-7597) — the turn loop's
+ * own `maxWallSecs` is already spent by the time judging starts, so judge gets
+ * its own generous-but-bounded window rather than inheriting a possibly-zero
+ * remainder. */
+const JUDGE_CALL_TIMEOUT_MS = 120_000;
+
+/**
+ * Thrown by {@link withTimeout} when the wrapped promise doesn't settle in
+ * time. Distinguishing this from a genuine transport error lets callers
+ * decide whether to fold it into a graceful cap-breach report or let it
+ * propagate.
+ */
+export class LlmTestTimeoutError extends Error {
+  constructor(label: string, ms: number) {
+    super(
+      `${label} did not complete within ${Math.max(0, Math.round(ms))}ms — ` +
+        'treating as a hung/stalled call (transport stall, silent quota backoff, ' +
+        'or similar), not a silent indefinite stall (EI-7597).',
+    );
+    this.name = 'LlmTestTimeoutError';
+  }
+}
+
+/**
+ * Race `promise` against a `ms` deadline. A scenario's declared `maxWallSecs`
+ * is meaningless as a hang guard unless something actually enforces it INSIDE
+ * a blocking call — without this, the runner's per-turn wall-clock check
+ * (which only runs BETWEEN turns) never fires while a single `await` is
+ * wedged, and the whole process sits silent forever (EI-7597: observed >3min
+ * with zero stdout progress on a 240s-capped scenario, then manual interrupt).
+ * `ms <= 0` rejects immediately (the budget is already exhausted). The timer
+ * is always cleared so a fast-settling promise doesn't leave a dangling handle.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return Promise.reject(new LlmTestTimeoutError(label, ms));
+  }
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new LlmTestTimeoutError(label, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 /**
  * Default lossy block a {@link CompactionPolicy} inserts in place of the
  * compacted-away turns. Deliberately states that prior verbatim data is gone
@@ -437,12 +481,28 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
         trigger = pendingTrigger;
         pendingTrigger = null;
       } else {
-        // Ask sim-user what to do.
-        const action = await simUser.nextAction({
-          history: simHistory,
-          cards: openCards,
-          turnsRemaining: maxTurns - turnIdx,
-        });
+        // Ask sim-user what to do. Timeout-guarded (EI-7597): a wedged
+        // transport/quota call must surface as the SAME wallclock cap breach
+        // the scenario already declares, not hang past it silently.
+        let action: SimAction;
+        try {
+          action = await withTimeout(
+            simUser.nextAction({
+              history: simHistory,
+              cards: openCards,
+              turnsRemaining: maxTurns - turnIdx,
+            }),
+            wallDeadlineMs - Date.now(),
+            `sim-user.nextAction (scenario '${scenario.id}', turn ${turnIdx})`,
+          );
+        } catch (err) {
+          if (err instanceof LlmTestTimeoutError) {
+            capBreaches.push('wallclock');
+            finishReason = 'cap_breach';
+            break;
+          }
+          throw err;
+        }
         simHistory.push({ who: 'sim', action });
 
         if (action.kind === 'give_up') {
@@ -476,7 +536,22 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
         meta: turnMeta,
       };
 
-      const result = await session.send(input);
+      // Timeout-guarded (EI-7597) — same rationale as sim-user.nextAction above.
+      let result: TurnResult;
+      try {
+        result = await withTimeout(
+          session.send(input),
+          wallDeadlineMs - Date.now(),
+          `session.send (scenario '${scenario.id}', turn ${turnIdx})`,
+        );
+      } catch (err) {
+        if (err instanceof LlmTestTimeoutError) {
+          capBreaches.push('wallclock');
+          finishReason = 'cap_breach';
+          break;
+        }
+        throw err;
+      }
       turns.push(result);
       simHistory.push({ who: 'sut', turn: result });
       wireMessages.push({ role: 'assistant', content: result.assistantText });
@@ -564,19 +639,27 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   } else {
     const personaSummary = describePersona(persona);
     const goalSummary = describeGoal(scenario.goal);
-    judge = await judgeRun(
-      {
-        model: judgeModel,
-        sutModel,
-        rubric: scenario.rubric,
-        scenarioId: scenario.id,
-        scenarioDescription: scenario.description,
-        personaSummary,
-        goalSummary,
-      },
-      summary,
-      violations,
-      deps.llmCall,
+    // Timeout-guarded (EI-7597): the turn loop's own maxWallSecs is spent by
+    // now (or the loop finished early with little left), so the judge call —
+    // a single unbounded LLM request — gets its own fixed, generous budget
+    // rather than silently hanging past everything else.
+    judge = await withTimeout(
+      judgeRun(
+        {
+          model: judgeModel,
+          sutModel,
+          rubric: scenario.rubric,
+          scenarioId: scenario.id,
+          scenarioDescription: scenario.description,
+          personaSummary,
+          goalSummary,
+        },
+        summary,
+        violations,
+        deps.llmCall,
+      ),
+      JUDGE_CALL_TIMEOUT_MS,
+      `judgeRun (scenario '${scenario.id}')`,
     );
   }
 
