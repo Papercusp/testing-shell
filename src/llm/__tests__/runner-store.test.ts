@@ -57,15 +57,16 @@ function makeFakeLlmCall(): { fn: LlmCallFn; calls: number } {
 }
 
 /** A fake ChatTarget that returns one canned assistant turn per send(). */
-function makeFakeTarget(sends: { value: number }): ChatTarget {
+function makeFakeTarget(sends: { value: number; inputs: TurnInput[] }): ChatTarget {
   return {
     id: 'fake',
     behaviors: [],
     async open(): Promise<ChatSession> {
       return {
         sessionId: 'fake-session',
-        async send(_input: TurnInput): Promise<TurnResult> {
+        async send(input: TurnInput): Promise<TurnResult> {
           sends.value++;
+          sends.inputs.push(input);
           const turn: TurnResult = {
             assistantText: 'Here you go.',
             toolCalls: [],
@@ -121,9 +122,9 @@ function makeScenario(): Scenario {
   };
 }
 
-function makeDeps(over: Partial<RunnerDeps> = {}): { deps: RunnerDeps; sends: { value: number } } {
+function makeDeps(over: Partial<RunnerDeps> = {}): { deps: RunnerDeps; sends: { value: number; inputs: TurnInput[] } } {
   const { fn } = makeFakeLlmCall();
-  const sends = { value: 0 };
+  const sends = { value: 0, inputs: [] as TurnInput[] };
   const target = makeFakeTarget(sends);
   const deps: RunnerDeps = {
     llmCall: fn,
@@ -154,6 +155,33 @@ describe('runScenario — store persistence seam (P-071)', () => {
     expect(report.scenarioId).toBe('fake-S01-store-seam');
     expect(report.runs).toHaveLength(1);
   });
+
+  it('appends scripted trigger text as a deterministic user turn', async () => {
+    const scenario = makeScenario();
+    scenario.triggers = [{ on: 'after_turn', fire: 'user_message', param: 0, text: 'scripted follow-up' }];
+    const { deps, sends } = makeDeps();
+
+    await runScenario(scenario, {}, deps);
+
+    expect(sends.inputs[0].trigger).toBe('user_message');
+    expect(sends.inputs[0].messages).toContainEqual({ role: 'user', content: 'scripted follow-up' });
+  });
+
+  it('runs a later scripted trigger before sim-user can declare success', async () => {
+    const scenario = makeScenario();
+    scenario.triggers = [
+      { on: 'after_turn', fire: 'user_message', param: 0, text: 'first scripted turn' },
+      { on: 'after_turn', fire: 'user_message', param: 1, text: 'second scripted turn' },
+    ];
+    const { deps, sends } = makeDeps();
+
+    await runScenario(scenario, {}, deps);
+
+    expect(sends.value).toBe(2);
+    expect(sends.inputs[1].trigger).toBe('user_message');
+    expect(sends.inputs[1].messages).toContainEqual({ role: 'user', content: 'second scripted turn' });
+  });
+
 
   it('calls store.persistRunReport once with the aggregate report when a store is injected', async () => {
     const scenario = makeScenario();

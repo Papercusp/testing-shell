@@ -90,6 +90,27 @@ describe('lintScenario — scripted trigger reachability', () => {
     }));
     expect(errorFields(vs)).toContain('triggers[0].param');
   });
+
+  it('accepts non-empty scripted user text for user_message triggers', () => {
+    const vs = lintScenario(validScenario({
+      triggers: [{ on: 'after_turn', fire: 'user_message', param: 1, text: 'what changed?' }],
+    }));
+    expect(errorFields(vs)).not.toContain('triggers[0].text');
+  });
+
+  it('rejects scripted text for non-user-message triggers', () => {
+    const vs = lintScenario(validScenario({
+      triggers: [{ on: 'after_turn', fire: 'continue', param: 1, text: 'what changed?' }],
+    } as never));
+    expect(errorFields(vs)).toContain('triggers[0].text');
+  });
+
+  it('rejects blank scripted trigger text', () => {
+    const vs = lintScenario(validScenario({
+      triggers: [{ on: 'after_turn', fire: 'user_message', param: 1, text: '   ' }],
+    } as never));
+    expect(errorFields(vs)).toContain('triggers[0].text');
+  });
 });
 
 describe('lintScenario — fixtures', () => {
