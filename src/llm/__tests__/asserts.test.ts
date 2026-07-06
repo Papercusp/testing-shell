@@ -176,6 +176,48 @@ describe('text_contains / text_excludes', () => {
       evaluateAsserts([{ kind: 'text_excludes', pattern: "I don't know" }], run),
     ).toHaveLength(1);
   });
+  it('text_excludes ignores banned patterns when the assistant is explicitly rejecting them', () => {
+    const run = makeRun({
+      turns: [
+        makeTurn({
+          assistantText:
+            'Do not run `git add`; git-sync owns commit + push. Use SSE rather than polling for live updates.',
+        }),
+      ],
+    });
+    expect(
+      evaluateAsserts([
+        { kind: 'text_excludes', pattern: /\bgit\s+(commit|push|add)\b/i },
+        { kind: 'text_excludes', pattern: /\b(setInterval|polling|poll the)\b/i },
+      ], run),
+    ).toHaveLength(0);
+  });
+  it('text_excludes still flags banned patterns when the assistant proposes the action', () => {
+    const run = makeRun({
+      turns: [
+        makeTurn({
+          assistantText: 'Run `git add .` and then add a setInterval polling loop every 5 seconds.',
+        }),
+      ],
+    });
+    expect(
+      evaluateAsserts([
+        { kind: 'text_excludes', pattern: /\bgit\s+(commit|push|add)\b/i },
+        { kind: 'text_excludes', pattern: /\b(setInterval|polling|poll the|every \d+\s?(s|sec|secs|ms|seconds))\b/i },
+      ], run),
+    ).toHaveLength(2);
+  });
+  it('text_excludes reports the real turn index when checking a specific turn', () => {
+    const run = makeRun({
+      turns: [
+        makeTurn({ assistantText: 'safe' }),
+        makeTurn({ assistantText: 'Use xdg-open to inspect it.' }),
+      ],
+    });
+    const violations = evaluateAsserts([{ kind: 'text_excludes', pattern: /\bxdg-open\b/i, turnIdx: 1 }], run);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].evidenceTurnIdx).toBe(1);
+  });
 });
 
 describe('card_emitted', () => {
