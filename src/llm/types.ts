@@ -272,6 +272,13 @@ export interface ScenarioTrigger {
   on: 'silence' | 'after_turn' | 'at_secs';
   /** Trigger to inject. */
   fire: TurnTrigger;
+  /**
+   * Optional deterministic user text for `fire: 'user_message'`. When present,
+   * the runner appends this user turn instead of asking the sim-user. This keeps
+   * multi-turn contract scenarios from depending on the sim-user to choose the
+   * required follow-up prompt.
+   */
+  text?: string;
   /** Parameter (e.g. 30 for 'silence'). */
   param?: number;
 }

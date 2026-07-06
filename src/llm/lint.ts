@@ -279,6 +279,14 @@ export function lintScenario(s: Scenario, opts: LintOpts = {}): LintViolation[] 
             `'${t.fire}' is not a valid TurnTrigger; allowed: ${Object.keys(ALL_TRIGGERS).join(', ')}`,
           );
         }
+        if (t.text !== undefined) {
+          if (typeof t.text !== 'string' || !t.text.trim()) {
+            violation(`triggers[${i}].text`, 'error', 'trigger text must be a non-empty string');
+          }
+          if (t.fire !== 'user_message') {
+            violation(`triggers[${i}].text`, 'error', 'trigger text is only valid with fire:user_message');
+          }
+        }
         if (t.on === 'after_turn' && typeof t.param === 'number') {
           if (t.param < 0 || !Number.isInteger(t.param)) {
             violation(`triggers[${i}].param`, 'error', `param must be a non-negative integer, got ${t.param}`);

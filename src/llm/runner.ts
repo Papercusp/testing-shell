@@ -420,10 +420,10 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   // `on: 'after_turn'` with `param: N` fires the trigger right before
   // turn N (0-indexed). Used by S09 to inject `generate_ideas` as the
   // first turn before sim-user gets a say. Consumed once per match.
-  const scriptedTriggers = new Map<number, TurnTrigger>();
+  const scriptedTriggers = new Map<number, ScenarioTrigger>();
   for (const t of scenario.triggers ?? []) {
     if (t.on === 'after_turn' && typeof t.param === 'number') {
-      scriptedTriggers.set(t.param, t.fire);
+      scriptedTriggers.set(t.param, t);
     } else if (t.on === 'silence' || t.on === 'at_secs') {
       // The runner drives turns synchronously, so 'silence' never
       // naturally occurs and 'at_secs' wallclock-deadlines aren't
@@ -432,7 +432,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       // The operator-converse route receives the trigger value and
       // behaves as if the named condition fired.
       if (!scriptedTriggers.has(0)) {
-        scriptedTriggers.set(0, t.fire);
+        scriptedTriggers.set(0, t);
       }
     }
   }
@@ -475,7 +475,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
 
       const scripted = scriptedTriggers.get(turnIdx);
       if (scripted) {
-        trigger = scripted;
+        if (scripted.text !== undefined) {
+          wireMessages.push({ role: 'user', content: scripted.text });
+          simHistory.push({ who: 'sim', action: { kind: 'text', text: scripted.text } });
+        }
+        trigger = scripted.fire;
         scriptedTriggers.delete(turnIdx);
       } else if (pendingTrigger) {
         trigger = pendingTrigger;
