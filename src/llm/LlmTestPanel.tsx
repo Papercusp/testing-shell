@@ -597,7 +597,7 @@ function RunDetailBody({
           </div>
         ) : null}
         {run.judge_json?.judgeOverruledAssert ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--needs, #b80)' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--warn, #b80)' }}>
             ⚠ judge overruled a deterministic assertion — review findings
           </div>
         ) : null}
