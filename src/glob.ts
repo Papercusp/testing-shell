@@ -247,3 +247,44 @@ export function inferWorkspaceRoot(from = process.cwd()): string {
 export function _resetWorkspaceRootCache(): void {
   _cachedRoot = null;
 }
+
+const VITEST_CONFIG_NAMES = [
+  'vitest.config.ts',
+  'vitest.config.mts',
+  'vitest.config.js',
+  'vitest.config.mjs',
+  'vitest.config.cjs',
+];
+
+/**
+ * Find the nearest `vitest.config.*` walking UP from the directory containing
+ * `filePath` (workspace-relative) towards (and including) `workspaceRoot`.
+ * Returns `null` when none exists anywhere in that chain (there is no
+ * root-level vitest.config.ts in this repo — CLAUDE.md EI-7666).
+ *
+ * EI-8902: a bare `npx vitest run <file>` invocation with no `--config` runs
+ * with ZERO Vite config whenever no root-level config exists — any `@/`-
+ * aliased import then false-fails with "Failed to resolve import ... Does the
+ * file exist?" even though the file and code are both correct, and (since
+ * each app aliases `@/*` to a DIFFERENT directory) a single shared root
+ * config can't fix this either — the config must be resolved PER FILE. This
+ * generated a whole class of false-positive watchdog red-test signals (every
+ * apps/operator-vite test importing via `@/`) before the invocation-vs-code
+ * distinction was diagnosed (EI-8883/EI-8902). Any spawn site that runs
+ * vitest per-file (not via `npm run test:affected`, which already resolves
+ * per-app config) should pass `--config` with this function's result.
+ */
+export function resolveNearestVitestConfig(filePath: string, workspaceRoot: string): string | null {
+  const root = resolve(workspaceRoot);
+  let dir = dirname(resolve(root, filePath));
+  while (true) {
+    for (const name of VITEST_CONFIG_NAMES) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+    if (dir === root) return null;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}

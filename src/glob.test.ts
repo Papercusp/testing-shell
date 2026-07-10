@@ -14,6 +14,7 @@ import {
   expandGlobs,
   inferWorkspaceRoot,
   _resetWorkspaceRootCache,
+  resolveNearestVitestConfig,
 } from './glob';
 
 describe('splitPrefix', () => {
@@ -147,5 +148,68 @@ describe('inferWorkspaceRoot', () => {
     const first = inferWorkspaceRoot(join(root, 'ws', 'nested'));
     // A different start path returns the memoized value, not a re-resolution.
     expect(inferWorkspaceRoot(join(root, 'gitonly', 'inner'))).toBe(first);
+  });
+});
+
+describe('resolveNearestVitestConfig (EI-8902)', () => {
+  // Two SEPARATE fixture roots — deliberately not shared — so the "no config
+  // anywhere" case can't be contaminated by a root-level config added for the
+  // "finds a root-level config" case.
+  describe('a workspace with no root-level config (this repo’s actual shape, CLAUDE.md EI-7666)', () => {
+    let root: string;
+
+    beforeAll(async () => {
+      root = await mkdtemp(join(tmpdir(), 'ts-vconfig-noroot-'));
+      // apps/pkg-a has its own vitest.config.ts; a nested test file should find it.
+      await mkdir(join(root, 'apps', 'pkg-a', 'src', 'deep'), { recursive: true });
+      await writeFile(join(root, 'apps', 'pkg-a', 'vitest.config.ts'), 'export default {}');
+      await writeFile(join(root, 'apps', 'pkg-a', 'src', 'deep', 'x.test.ts'), 'x');
+      // apps/pkg-b has NO vitest.config.* anywhere in its chain up to root, and
+      // root itself has none either.
+      await mkdir(join(root, 'apps', 'pkg-b', 'src'), { recursive: true });
+      await writeFile(join(root, 'apps', 'pkg-b', 'src', 'y.test.ts'), 'y');
+    });
+
+    afterAll(async () => {
+      await rm(root, { recursive: true, force: true });
+    });
+
+    it('finds a package-level config by walking up from a nested test file', () => {
+      const found = resolveNearestVitestConfig('apps/pkg-a/src/deep/x.test.ts', root);
+      expect(found).toBe(join(root, 'apps', 'pkg-a', 'vitest.config.ts'));
+    });
+
+    it('returns null when no config exists anywhere up to the workspace root (the EI-8902 bare-invocation case)', () => {
+      const found = resolveNearestVitestConfig('apps/pkg-b/src/y.test.ts', root);
+      expect(found).toBeNull();
+    });
+
+    it('never walks above workspaceRoot even if an ancestor outside it has a config', () => {
+      // pkg-b's chain (apps/pkg-b -> apps -> root) is checked; nothing above
+      // root is ever consulted — pin the stop condition by narrowing
+      // workspaceRoot itself to 'apps' (one level below the real root).
+      const found = resolveNearestVitestConfig('apps/pkg-b/src/y.test.ts', join(root, 'apps'));
+      expect(found).toBeNull();
+    });
+  });
+
+  describe('a workspace WITH a root-level config', () => {
+    let root: string;
+
+    beforeAll(async () => {
+      root = await mkdtemp(join(tmpdir(), 'ts-vconfig-withroot-'));
+      await mkdir(join(root, 'apps', 'pkg-c'), { recursive: true });
+      await writeFile(join(root, 'vitest.config.mjs'), 'export default {}');
+      await writeFile(join(root, 'apps', 'pkg-c', 'z.test.ts'), 'z');
+    });
+
+    afterAll(async () => {
+      await rm(root, { recursive: true, force: true });
+    });
+
+    it('finds the root-level config when the nearest package has none of its own', () => {
+      const found = resolveNearestVitestConfig('apps/pkg-c/z.test.ts', root);
+      expect(found).toBe(join(root, 'vitest.config.mjs'));
+    });
   });
 });
