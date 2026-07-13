@@ -65,16 +65,22 @@ export interface LlmCallOpts {
    */
   governorMaxWaitMs?: number;
   /**
-   * Fired when the host's governor ADMITS the call — immediately before the request is
-   * issued — and again on each retry attempt.
+   * Fired when the host's LOCAL governor admits the call — immediately before the HTTP
+   * request is issued — and again on each retry attempt.
    *
-   * Lets a caller charge queue-wait and generation to SEPARATE budgets: everything before
-   * this callback is admission (bound it with the caller's outer deadline), everything after
-   * is generation (bound it with a per-call cap). Collapsing both into one wall-clock timer
-   * is what turns a survivable rate-limit pause into a hard failure (WI-4475). Ignored by
-   * hosts with no governor.
+   * This does NOT prove upstream generation began: the HTTP request may itself enter an
+   * inference-gateway admission queue. Use {@link onResponseStart} for the generation-phase
+   * boundary. Ignored by hosts with no governor.
    */
   onAdmitted?: () => void;
+  /**
+   * Fired when the transport receives response headers / its first stream event, after every
+   * local AND gateway admission layer. This is the safe boundary for starting a generation
+   * timer: `onAdmitted` can fire while the request still has minutes of gateway queueing left.
+   * Re-fired on a retry attempt that reaches a response. Ignored by transports that cannot
+   * expose response start.
+   */
+  onResponseStart?: () => void;
 }
 
 export interface LlmCallResult {
