@@ -52,6 +52,29 @@ export interface LlmCallOpts {
    * default band; omit for an untiered call. Ignored by hosts with no gateway.
    */
   priority?: string;
+  /**
+   * Cap (ms) on the ADMISSION wait — how long the host's shared rate-limit governor may
+   * block this call waiting for a permit, BEFORE the request is issued. Omit to inherit
+   * the host default.
+   *
+   * A caller with a bounded outer budget (a cycle timeout, a request deadline) should pass
+   * the time it actually has LEFT. Otherwise the inner admission wait can equal or exceed
+   * the caller's whole budget, and the caller's own timer will guillotine a call that was
+   * correctly waiting for capacity — surfacing as a bogus transport "timeout" with $0 spent
+   * (WI-4475). Ignored by hosts with no governor.
+   */
+  governorMaxWaitMs?: number;
+  /**
+   * Fired when the host's governor ADMITS the call — immediately before the request is
+   * issued — and again on each retry attempt.
+   *
+   * Lets a caller charge queue-wait and generation to SEPARATE budgets: everything before
+   * this callback is admission (bound it with the caller's outer deadline), everything after
+   * is generation (bound it with a per-call cap). Collapsing both into one wall-clock timer
+   * is what turns a survivable rate-limit pause into a hard failure (WI-4475). Ignored by
+   * hosts with no governor.
+   */
+  onAdmitted?: () => void;
 }
 
 export interface LlmCallResult {
