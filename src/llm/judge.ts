@@ -39,6 +39,17 @@ export interface JudgeOpts {
    * second-opinion pass reuses opts.model (no real bias mitigation).
    */
   sutModel?: string;
+  /**
+   * EI-336: the target's real, canonical tool-name catalog (when it has a
+   * fixed one — `ChatTarget.toolNames`). Grounds any "is this tool name
+   * real?" claim the rubric's groundedness/toolSelection anchors invite —
+   * without it the judge was asserting real tools (e.g. `locks:acquire`,
+   * `coord:declare-intent`) were "fabricated" purely from its own
+   * (incomplete) memory of the registry, flipping a run to `failed` even
+   * when every deterministic assert passed. Optional; omitted for targets
+   * with no fixed catalog (the judge falls back to hedged judgment).
+   */
+  knownToolNames?: readonly string[];
 }
 
 export async function judgeRun(
@@ -237,6 +248,19 @@ function buildJudgeSystemPrompt(opts: JudgeOpts): string {
         `- **${a.id}** — ${a.description}\n    0 = ${a.anchors.bad}\n    5 = ${a.anchors.ideal}`,
     ),
     '',
+    ...(opts.knownToolNames?.length
+      ? [
+          '## Known tool registry (ground truth — EI-336)',
+          'This is the REAL, complete set of tool names available to the assistant this run. ' +
+            'Any tool name the transcript uses that appears here IS REAL — never call it ' +
+            '"fabricated", "invented", or "does not exist in any registry", regardless of ' +
+            "whether you personally recognize it. Only a name ABSENT from this list may be " +
+            'flagged as a possible fabrication, and even then hedge (you cannot see the full ' +
+            'live registry, only this run\'s offered subset).',
+          opts.knownToolNames.map((n) => `\`${n}\``).join(', '),
+          '',
+        ]
+      : []),
     '## Rules',
     '- Cite turn indices (0-based) for every finding.',
     '- If you agree with a deterministic-assert violation, restate it with a turn-cite.',
@@ -245,6 +269,13 @@ function buildJudgeSystemPrompt(opts: JudgeOpts): string {
     "- **Score-5 anchor**: if every axis would score ≥4 and you have no specific turn to cite, return `novel_failures: []` and `notes: \"nominal\"`. Do not invent critique to feel useful.",
     "- `suggestion` on each finding must be a concrete behavioral change (e.g. \"shorten the assistant turn at idx 2 to a single question\"), NOT an implementation change (\"rewrite handleConverse to...\").",
     '- Do not propose code changes. The framework will not auto-implement.',
+    ...(opts.knownToolNames?.length
+      ? []
+      : [
+          '- You have NO ground-truth tool registry for this run. Never assert a tool name is ' +
+            '"fabricated" / "does not exist" with confidence — at most note it as unfamiliar ' +
+            'and set a lower severity (`warn`, not `error`).',
+        ]),
     '',
     '## Output schema',
     'Return ONLY a JSON object with this exact shape (no prose, no fences):',

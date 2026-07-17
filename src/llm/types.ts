@@ -35,6 +35,20 @@ export interface ChatTarget {
   readonly supportsVariants?: boolean;
 
   /**
+   * EI-336: the canonical (colon-form) tool names actually offered to the
+   * SUT this run, when the target has a fixed/known catalog. The judge is
+   * an LLM with no live view of the real tool registry — without this it
+   * can only guess whether a tool name the SUT called is real, and guessing
+   * wrong flips a "groundedness"/"toolSelection" finding to `error` (a
+   * confident false positive: e.g. calling a genuinely-real tool
+   * "fabricated"), which can hard-fail a run whose deterministic asserts
+   * all passed. Optional — a target without a fixed catalog (e.g. one that
+   * proxies the live ~550-tool registry) omits it, and the judge falls back
+   * to its own (hedged) judgment.
+   */
+  readonly toolNames?: readonly string[];
+
+  /**
    * Open a new session. Returns an opaque session that the runner threads
    * through `send()` / `close()`. Per-target implementations decide how
    * to allocate conversation ids, workspace roots, etc.

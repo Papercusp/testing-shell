@@ -657,6 +657,10 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
           scenarioDescription: scenario.description,
           personaSummary,
           goalSummary,
+          // EI-336: ground the judge's tool-name claims against the target's
+          // real catalog when it declares one — fixes the judge flagging a
+          // genuinely-real tool (e.g. `locks:acquire`) as "fabricated".
+          ...(target.toolNames ? { knownToolNames: target.toolNames } : {}),
         },
         summary,
         violations,
