@@ -65,6 +65,17 @@ export interface LlmCallOpts {
    */
   governorMaxWaitMs?: number;
   /**
+   * ABSOLUTE epoch-ms deadline for the host transport's transient-retry ladder (WI-5391,
+   * the WI-4475 class). `governorMaxWaitMs` bounds ONE admission wait; a host's retry
+   * ladder (multiple attempts + backoff sleeps) is otherwise deadline-blind and can
+   * outlive a bounded caller's own timer — which then mislabels an honest capacity error
+   * (429/529) as the caller's generic timeout. With this set, the host stops retrying
+   * before any backoff that would cross the deadline and surfaces the last classified
+   * transport error instead. Omit for the host's default patient ladder. Ignored by
+   * hosts without a retry ladder.
+   */
+  retryDeadlineMs?: number;
+  /**
    * Fired when the host's LOCAL governor admits the call — immediately before the HTTP
    * request is issued — and again on each retry attempt.
    *
