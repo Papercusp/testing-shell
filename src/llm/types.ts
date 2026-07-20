@@ -140,6 +140,17 @@ export interface TurnResult {
   /** How the turn ended. */
   finishReason: 'done' | 'error' | 'aborted' | 'budget' | 'cap';
   error?: string;
+  /**
+   * WI-5613: set when the primary turn stream was severed by a transport
+   * error (e.g. a concurrent server restart) AFTER a card the target was
+   * already watching for (a blocking human-in-the-loop tool call like
+   * chat:ask_choice) had been observed via a separate channel — so
+   * `finishReason` was downgraded from 'error' back to 'done' instead of
+   * sinking the whole run to `errored`/inconclusive on an infra hiccup
+   * unrelated to the SUT's actual (already-proven) behavior. `error`
+   * above still carries the original disconnect message for diagnostics.
+   */
+  recoveredFromDisconnectAfterCard?: boolean;
   /** Full SSE event tape for replay/judge. */
   rawSseTape: SseEvent[];
 }

@@ -338,7 +338,7 @@ function formatTranscript(turns: TurnResult[]): string {
     if (t.controlTags.length > 0) {
       lines.push(`**Control tags:** ${t.controlTags.map((c) => `<${c.tag}/>`).join(' ')}`);
     }
-    lines.push(`**finishReason:** ${t.finishReason}${t.error ? ` — ${t.error}` : ''}`);
+    lines.push(`**finishReason:** ${t.finishReason}${t.error ? ` — ${t.error}` : ''}${t.recoveredFromDisconnectAfterCard ? ' (recovered: card observed before disconnect)' : ''}`);
     lines.push('');
   }
   return lines.join('\n');
