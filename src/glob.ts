@@ -206,46 +206,50 @@ export async function expandGlobs(
 }
 
 /**
- * Resolve the workspace root from any path inside the repo. Walks up
- * looking for `pnpm-workspace.yaml`; falls back to the first ancestor
- * containing `.git`. The Hono host runs with cwd=apps/operator, so
- * trusting `process.cwd()` would land us two levels down from the root
- * and miss every repo-relative glob.
+ * Resolve the workspace root from any path inside the repo. Walks up from
+ * `from` and stops at the FIRST ancestor carrying a root marker — either a
+ * `pnpm-workspace.yaml` (workspace marker) or a `.git` (repo marker). The
+ * Hono host runs with cwd=apps/operator, so trusting `process.cwd()` would
+ * land us two levels down from the root and miss every repo-relative glob.
  *
- * Result is memoized for the process lifetime — workspace root never
- * moves while the dev server is alive.
+ * NEAREST MARKER WINS (EI-18771273773696439). This used to be two full
+ * walks: `pnpm-workspace.yaml` all the way to `/` first, and only then a
+ * second walk for `.git`. So a stray `pnpm-workspace.yaml` ANYWHERE above
+ * the repo outranked the repo's own `.git` one level up. One walk checking
+ * both markers per level is the least-surprising rule and is identical for
+ * the ordinary cases (a git repo, a pnpm monorepo whose root carries both).
+ *
+ * Memoized PER START PATH, never globally (EI-18771273773696439). A single
+ * shared operator process serves callers rooted in DIFFERENT trees — the
+ * staging checkout and the release checkout — so a process-wide memo let
+ * the first caller's root leak to every later caller regardless of the
+ * `from` they passed, silently answering about the wrong tree. That is the
+ * defect class this function sat at the bottom of; a parameter the function
+ * ignores after the first call is not a cache, it is a bug.
  */
-let _cachedRoot: string | null = null;
+const _rootCache = new Map<string, string>();
 export function inferWorkspaceRoot(from = process.cwd()): string {
-  if (_cachedRoot) return _cachedRoot;
-  let dir = resolve(from);
+  const start = resolve(from);
+  const cached = _rootCache.get(start);
+  if (cached !== undefined) return cached;
+
+  let dir = start;
   while (true) {
-    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
-      _cachedRoot = dir;
+    if (existsSync(join(dir, 'pnpm-workspace.yaml')) || existsSync(join(dir, '.git'))) {
+      _rootCache.set(start, dir);
       return dir;
     }
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  // Fallback: walk up looking for .git.
-  dir = resolve(from);
-  while (true) {
-    if (existsSync(join(dir, '.git'))) {
-      _cachedRoot = dir;
-      return dir;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  _cachedRoot = from;
-  return from;
+  _rootCache.set(start, start);
+  return start;
 }
 
-/** INTERNAL — test-only. Reset the cached workspace root. */
+/** INTERNAL — test-only. Reset the cached workspace roots. */
 export function _resetWorkspaceRootCache(): void {
-  _cachedRoot = null;
+  _rootCache.clear();
 }
 
 const VITEST_CONFIG_NAMES = [

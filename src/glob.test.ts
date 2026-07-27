@@ -126,6 +126,11 @@ describe('inferWorkspaceRoot', () => {
     await writeFile(join(root, 'ws', 'pnpm-workspace.yaml'), 'packages: []');
     await mkdir(join(root, 'gitonly', 'inner'), { recursive: true });
     await mkdir(join(root, 'gitonly', '.git'), { recursive: true });
+    // mixed/: an OUTER pnpm-workspace.yaml above an INNER .git — the
+    // precedence case EI-18771273773696439 called out.
+    await mkdir(join(root, 'mixed', 'inner', 'deep'), { recursive: true });
+    await writeFile(join(root, 'mixed', 'pnpm-workspace.yaml'), 'packages: []');
+    await mkdir(join(root, 'mixed', 'inner', '.git'), { recursive: true });
   });
 
   afterAll(async () => {
@@ -143,11 +148,43 @@ describe('inferWorkspaceRoot', () => {
     expect(inferWorkspaceRoot(join(root, 'gitonly', 'inner'))).toBe(join(root, 'gitonly'));
   });
 
-  it('memoizes the result across calls until reset', () => {
+  it('takes the NEAREST marker — an outer pnpm-workspace.yaml does not outrank an inner .git', () => {
+    // EI-18771273773696439: the old implementation walked for
+    // pnpm-workspace.yaml all the way to `/` BEFORE ever looking for `.git`,
+    // so the outer workspace marker won from any depth. Nearest wins now.
     _resetWorkspaceRootCache();
-    const first = inferWorkspaceRoot(join(root, 'ws', 'nested'));
-    // A different start path returns the memoized value, not a re-resolution.
-    expect(inferWorkspaceRoot(join(root, 'gitonly', 'inner'))).toBe(first);
+    expect(inferWorkspaceRoot(join(root, 'mixed', 'inner', 'deep'))).toBe(
+      join(root, 'mixed', 'inner'),
+    );
+    // ...and a path under the outer dir but ABOVE the inner .git still
+    // resolves to the workspace marker, so the marker itself still counts.
+    _resetWorkspaceRootCache();
+    expect(inferWorkspaceRoot(join(root, 'mixed'))).toBe(join(root, 'mixed'));
+  });
+
+  it('memoizes PER START PATH, never process-globally (EI-18771273773696439)', () => {
+    _resetWorkspaceRootCache();
+    const wsRoot = inferWorkspaceRoot(join(root, 'ws', 'nested'));
+    expect(wsRoot).toBe(join(root, 'ws'));
+
+    // THE REGRESSION THIS PINS: a different start path must RE-RESOLVE. The
+    // old process-wide memo returned `wsRoot` here — which is exactly how one
+    // shared operator process answered about the staging tree for a caller
+    // rooted in the release checkout (and vice versa), handing agents a green
+    // verdict about code they had not written.
+    expect(inferWorkspaceRoot(join(root, 'gitonly', 'inner'))).toBe(join(root, 'gitonly'));
+    expect(inferWorkspaceRoot(join(root, 'gitonly', 'inner'))).not.toBe(wsRoot);
+
+    // The legitimate half of the old behaviour survives: the SAME start path
+    // is still served from cache rather than re-walked.
+    expect(inferWorkspaceRoot(join(root, 'ws', 'nested'))).toBe(wsRoot);
+  });
+
+  it('normalises the start path so equivalent spellings share one cache entry', () => {
+    _resetWorkspaceRootCache();
+    const direct = inferWorkspaceRoot(join(root, 'gitonly', 'inner'));
+    const viaDotDot = inferWorkspaceRoot(join(root, 'gitonly', 'inner', 'deep', '..'));
+    expect(viaDotDot).toBe(direct);
   });
 });
 
