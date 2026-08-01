@@ -217,11 +217,14 @@ export async function runPipelineScenario(
     judge = await deps.judge(scenario, result, violations);
   }
 
+  // EI-133: mirrors runner.ts's computeRunStatus — a judge-only error finding
+  // (deterministic asserts all passing) does not fail the run when the
+  // scenario's rubric opts into judgeAdvisory (default false: unchanged).
   const hasErrorViolation = violations.some((v) => v.severity === 'error');
   const hasErrorFinding = judge?.findings.some((f) => f.severity === 'error') ?? false;
   const status: PipelineRunReport['status'] = inconclusive
     ? 'errored'
-    : hasErrorViolation || hasErrorFinding
+    : hasErrorViolation || (hasErrorFinding && !scenario.rubric.judgeAdvisory)
       ? 'failed'
       : 'passed';
 

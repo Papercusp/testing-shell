@@ -21,6 +21,7 @@ export * from './deps';
 export {
   runScenario,
   inconclusiveReason,
+  computeRunStatus,
   type RunReport,
   type SingleRunReport,
   type RunnerOpts,
