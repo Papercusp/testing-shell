@@ -676,13 +676,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   // zero because operator-converse doesn't return per-stream cost).
   summary.totalCostUsd += simUser.costUsd + judge.costUsd;
 
-  const hasErrorViolation = violations.some((v) => v.severity === 'error');
-  const hasErrorFinding = judge.findings.some((f) => f.severity === 'error');
-  let status: SingleRunReport['status'] = 'passed';
-  // An inconclusive run is `errored`, not `failed` — the SUT/environment
-  // broke, the operator did not behaviorally fail.
-  if (finishReason === 'errored' || inconclusive) status = 'errored';
-  else if (hasErrorViolation || hasErrorFinding) status = 'failed';
+  const status = computeRunStatus({ finishReason, inconclusive, violations, judge, rubric: scenario.rubric });
 
   if (claimKey && deps.claim) {
     try {

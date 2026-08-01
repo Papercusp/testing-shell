@@ -403,6 +403,22 @@ export interface JudgeRubric {
   axes: JudgeAxis[];
   /** 'high' invokes multi-pass judging at higher cost (§6.4). */
   criticality?: 'normal' | 'high';
+  /**
+   * EI-133: when true, the judge is a SECONDARY/advisory signal for this
+   * target — an error-severity judge finding alone (no error-severity
+   * deterministic assert violation) does NOT flip a run's status to
+   * `failed`; it still surfaces in the report for a human to read. The
+   * deterministic asserts remain the load-bearing gate either way (an
+   * error-severity assert violation always fails the run).
+   *
+   * Opt-in per rubric, not a global default: some targets (su,
+   * onboarding-tutor, overwatch) already document "deterministic asserts
+   * are load-bearing, judge is secondary" as their design (D-002-class
+   * decisions on their own plans); others have made no such claim, so
+   * their judge findings keep failing runs exactly as before. Set this
+   * only on a rubric whose target/plan has actually decided that.
+   */
+  judgeAdvisory?: boolean;
 }
 
 export interface JudgeAxis {
