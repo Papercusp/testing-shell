@@ -35,6 +35,7 @@ import type {
   ChatSession,
   CompactionPolicy,
   JudgeResult,
+  JudgeRubric,
   Persona,
   RunSummary,
   Scenario,
@@ -712,6 +713,36 @@ export function inconclusiveReason(
   );
   if (allEmpty) return `all ${turns.length} turn(s) produced empty output`;
   return null;
+}
+
+/**
+ * EI-133: computes a single run's pass/fail/errored status.
+ *
+ * An inconclusive/errored run is always `errored` — the SUT/environment
+ * broke, not an operator behavioral failure. Otherwise: an error-severity
+ * DETERMINISTIC assert violation always fails the run (D-002's load-bearing
+ * gate, unconditional). An error-severity JUDGE finding fails the run too —
+ * UNLESS the rubric opts into `judgeAdvisory` (see JudgeRubric), in which
+ * case a judge-only error finding (no assert violation) is surfaced but does
+ * not flip the verdict. This is candidate-fix #1 from EI-133: the hermetic
+ * stub executor makes a capable SUT detect the stub environment and exhibit
+ * groundedness pathologies (fabrication, retraction, refusal) that would not
+ * occur against real tool results — for rubrics that already treat the judge
+ * as a secondary signal, that noise should not flip `passed` runs to
+ * `failed` on its own.
+ */
+export function computeRunStatus(args: {
+  finishReason: RunSummary['finishReason'];
+  inconclusive: string | null;
+  violations: Violation[];
+  judge: JudgeResult;
+  rubric: JudgeRubric;
+}): SingleRunReport['status'] {
+  const { finishReason, inconclusive, violations, judge, rubric } = args;
+  if (finishReason === 'errored' || inconclusive) return 'errored';
+  if (violations.some((v) => v.severity === 'error')) return 'failed';
+  if (judge.findings.some((f) => f.severity === 'error') && !rubric.judgeAdvisory) return 'failed';
+  return 'passed';
 }
 
 // =============================================================================
