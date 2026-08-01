@@ -24,6 +24,8 @@ const finding = (over: Partial<JudgeFinding> = {}): JudgeFinding => ({
   severity: 'error',
   shape: 'shape-a',
   claim: 'fabricated a table name',
+  copyPrompt: 'fix: fabricated a table name',
+  isNovel: true,
   ...over,
 });
 
