@@ -53,13 +53,11 @@
   "scripts": {
     "test": "vitest run"
   },
-  "dependencies": {
-    "@papercusp/model-pricing": "*"
-  },
   "devDependencies": {
     "vitest": "^4.1.4"
   },
   "peerDependencies": {
+    "@papercusp/model-pricing": "*",
     "react": ">=18",
     "nuqs": ">=2",
     "hono": ">=4",
