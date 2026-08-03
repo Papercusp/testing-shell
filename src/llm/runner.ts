@@ -39,6 +39,7 @@ import type {
   Persona,
   RunSummary,
   Scenario,
+  ScenarioTrigger,
   ScenarioVariant,
   TurnInput,
   TurnResult,
@@ -478,7 +479,15 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       if (scripted) {
         if (scripted.text !== undefined) {
           wireMessages.push({ role: 'user', content: scripted.text });
-          simHistory.push({ who: 'sim', action: { kind: 'text', text: scripted.text } });
+          // `thought` is required on every SimAction variant. A scripted trigger is
+          // scenario-declared rather than sim-user-reasoned, so state that plainly
+          // instead of inventing a rationale the sim-user never produced — this text
+          // shows up in transcripts and judge input, where a fabricated thought would
+          // read as real model reasoning.
+          simHistory.push({
+            who: 'sim',
+            action: { kind: 'text', thought: '(scripted trigger — declared by the scenario)', text: scripted.text },
+          });
         }
         trigger = scripted.fire;
         scriptedTriggers.delete(turnIdx);
