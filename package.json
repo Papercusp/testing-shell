@@ -66,9 +66,20 @@
     "gremlins.js": ">=2"
   },
   "peerDependenciesMeta": {
-    "hono": { "optional": true },
-    "playwright": { "optional": true },
-    "@browserbasehq/stagehand": { "optional": true },
-    "gremlins.js": { "optional": true }
+    "hono": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "@browserbasehq/stagehand": {
+      "optional": true
+    },
+    "gremlins.js": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@papercusp/test-config": "*"
   }
 }
