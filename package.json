@@ -54,6 +54,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@papercusp/test-config": "*",
     "vitest": "^4.1.4"
   },
   "peerDependencies": {
@@ -78,8 +79,5 @@
     "gremlins.js": {
       "optional": true
     }
-  },
-  "dependencies": {
-    "@papercusp/test-config": "*"
   }
 }
