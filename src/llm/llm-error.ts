@@ -21,6 +21,7 @@ export type TurnErrorClass =
   | 'timeout'
   | 'transient_io'
   | 'auth'
+  | 'context_overflow'
   | 'agent_crash'
   | 'empty_output'
   | 'malformed_output'
