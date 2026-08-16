@@ -37,8 +37,25 @@ export interface RunSummary {
   /** route → { count, p50inp, p95inp, maxInp, errors } */
   routes: Record<string, RouteRollup>;
   reloads?: number;
+  /** Severe (>100ms) frame gaps inside the MEASURED window only. */
   frameDrops?: number;
+  /** Worst frame gap inside the MEASURED window — the graded number. */
   maxFrameMs?: number;
+  /**
+   * Offset of `maxFrameMs` within the measured window. A breach at ~0ms is a
+   * start-of-window artefact; one in the middle is real app jank. Without this
+   * the two are indistinguishable and every breach needs a fresh experiment.
+   */
+  maxFrameAtMs?: number;
+  /**
+   * Worst frame gap observed while the recorder was ARMING (importing the
+   * ~226KB gremlins-runtime chunk, tagging blocked elements) — the instrument's
+   * own cost, excluded from the graded budget but REPORTED so the exclusion is
+   * visible rather than silent.
+   */
+  setupMaxFrameMs?: number;
+  /** Severe frame gaps during arming; excluded from `frameDrops`. */
+  setupFrameDrops?: number;
 }
 
 export interface RouteRollup {

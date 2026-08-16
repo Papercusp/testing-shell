@@ -336,6 +336,18 @@ export default function RecorderHost() {
         horde.unleash({ nb: Math.floor(msg.durationMs / 50) }).catch(() => { /* horde aborted */ });
       }
 
+      // ARMING COMPLETE — open the measured window. Deliberately placed OUTSIDE
+      // the horde branch: a dry run, or a gremlins import that failed, must still
+      // produce a measured window. Inside the branch, those paths would leave
+      // `measuring` false forever and report maxFrameMs=0 — an unmeasured budget
+      // rendered as a perfect score, which is the failure mode this whole suite
+      // keeps rediscovering.
+      // Resetting `lastFrame` is what charges the arming gap to setup rather than
+      // to the first chaos frame.
+      lastFrame = performance.now();
+      windowStart = lastFrame;
+      measuring = true;
+
       // Stop after durationMs even if horde is still running or in dry-run.
       const timer = setTimeout(() => finishRun(), msg.durationMs);
       finishCurrent = finishRun;
@@ -360,6 +372,9 @@ export default function RecorderHost() {
           reloads,
           frameDrops,
           maxFrameMs: Math.round(maxFrameMs),
+          maxFrameAtMs: Math.round(maxFrameAtMs),
+          setupMaxFrameMs: Math.round(setupMaxFrameMs),
+          setupFrameDrops,
         };
         saveRun(summary);
         send({ type: 'done', runId: currentRunId!, summary: { ...summary, events: [] } });
