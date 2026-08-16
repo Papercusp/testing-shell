@@ -233,9 +233,29 @@ export default function RecorderHost() {
       send({ type: 'started', runId: currentRunId });
       // Count only severe frame gaps here; maxFrameMs still captures smaller
       // 50–100ms hitches without making the chaos suite fail on benign jitter.
+      //
+      // ARMING IS NOT FREE, AND IT USED TO BE CHARGED TO THE APP. The frame loop
+      // starts here, but the recorder is not armed yet: below, it dynamically
+      // imports the ~226KB `gremlins-runtime` chunk and then walks the entire
+      // document to tag blocked elements. Evaluating that chunk blocks the main
+      // thread, so the gap landed in `maxFrameMs` and the chaos suite failed a
+      // 200ms app budget on the INSTRUMENT's own startup.
+      //
+      // Setup frames are therefore measured into a SEPARATE bucket and reported
+      // alongside the graded ones — never silently dropped. A discarded
+      // measurement nobody can see is exactly how a real regression hides, so
+      // the discard is made visible instead of invisible.
       const frameDropThresholdMs = 100;
       let frameDrops = 0;
       let maxFrameMs = 0;
+      /** Worst frame gap observed while ARMING (before the measured window). */
+      let setupMaxFrameMs = 0;
+      let setupFrameDrops = 0;
+      /** Offset of the worst graded frame within the measured window. */
+      let maxFrameAtMs = 0;
+      /** False until arming completes; see the window-open below. */
+      let measuring = false;
+      let windowStart = 0;
       let rafStop = false;
       let lastFrame = performance.now();
       const raf = () => {
@@ -247,8 +267,16 @@ export default function RecorderHost() {
           return;
         }
         const delta = now - lastFrame;
-        if (delta > frameDropThresholdMs) frameDrops += 1;
-        if (delta > maxFrameMs) maxFrameMs = delta;
+        if (measuring) {
+          if (delta > frameDropThresholdMs) frameDrops += 1;
+          if (delta > maxFrameMs) {
+            maxFrameMs = delta;
+            maxFrameAtMs = now - windowStart;
+          }
+        } else {
+          if (delta > frameDropThresholdMs) setupFrameDrops += 1;
+          if (delta > setupMaxFrameMs) setupMaxFrameMs = delta;
+        }
         lastFrame = now;
         requestAnimationFrame(raf);
       };
