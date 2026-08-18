@@ -23,6 +23,11 @@
       "import": "./src/data-source.ts",
       "default": "./src/data-source.ts"
     },
+    "./census": {
+      "types": "./src/census/index.ts",
+      "import": "./src/census/index.ts",
+      "default": "./src/census/index.ts"
+    },
     "./glob": {
       "types": "./src/glob.ts",
       "import": "./src/glob.ts",
