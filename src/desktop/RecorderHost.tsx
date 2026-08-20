@@ -258,6 +258,17 @@ export default function RecorderHost() {
       let windowStart = 0;
       let rafStop = false;
       let lastFrame = performance.now();
+      // A Tauri runner may briefly focus the controller webview between two
+      // recorder rAF callbacks. If focus returns before the next callback, a
+      // callback-time hasFocus() check alone cannot see the interruption and
+      // incorrectly charges the background-throttled gap to the app. Reset at
+      // the transition itself so only continuously foregrounded time is graded.
+      const resetFrameClock = () => {
+        lastFrame = performance.now();
+      };
+      window.addEventListener('blur', resetFrameClock);
+      window.addEventListener('focus', resetFrameClock);
+      document.addEventListener('visibilitychange', resetFrameClock);
       const raf = () => {
         if (rafStop) return;
         const now = performance.now();
@@ -281,9 +292,13 @@ export default function RecorderHost() {
         requestAnimationFrame(raf);
       };
       requestAnimationFrame(raf);
-
-
-      const teardown = setupObservers();
+      const teardownObservers = setupObservers();
+      const teardown = () => {
+        teardownObservers();
+        window.removeEventListener('blur', resetFrameClock);
+        window.removeEventListener('focus', resetFrameClock);
+        document.removeEventListener('visibilitychange', resetFrameClock);
+      };
 
       // Dynamic import gremlins.js — keeps it out of the main app bundle.
       let gremlins: Gremlins | null = null;

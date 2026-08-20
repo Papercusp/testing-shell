@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { rollupRoutes, saveRun, loadRuns, clearRuns, type RecorderEvent, type RunSummary } from './recorder-channel';
 
 // jsdom's localStorage isn't reliable under this runner; use a deterministic
@@ -50,5 +52,16 @@ describe('saveRun / loadRuns / clearRuns', () => {
     for (let i = 0; i < 14; i++) saveRun(mk(`r${i}`));
     expect(loadRuns()).toHaveLength(10);
     expect(loadRuns()[0].runId).toBe('r13');
+  });
+});
+
+describe('RecorderHost frame accounting guard', () => {
+  it('resets the frame clock on focus and visibility transitions', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/desktop/RecorderHost.tsx'), 'utf8');
+    expect(source).toContain("window.addEventListener('blur', resetFrameClock)");
+    expect(source).toContain("window.addEventListener('focus', resetFrameClock)");
+    expect(source).toContain("document.addEventListener('visibilitychange', resetFrameClock)");
+    expect(source).toContain("window.removeEventListener('blur', resetFrameClock)");
+    expect(source).toContain("document.removeEventListener('visibilitychange', resetFrameClock)");
   });
 });
