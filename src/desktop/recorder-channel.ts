@@ -20,7 +20,7 @@ export type RecorderMsg =
 export interface RecorderEvent {
   ts: number;
   route: string;
-  kind: 'click' | 'long-task' | 'console-error' | 'layout-shift' | 'unhandled-error';
+  kind: 'click' | 'click-dispatch' | 'long-task' | 'console-error' | 'layout-shift' | 'unhandled-error';
   target: string;
   inp?: number;
   duration?: number;

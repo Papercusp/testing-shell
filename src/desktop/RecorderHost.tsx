@@ -207,8 +207,18 @@ export default function RecorderHost() {
           detail: args.map((a) => (typeof a === 'string' ? a : (a as Error)?.message ?? String(a))).join(' ').slice(0, 200),
         });
       };
-      const onClick = () => {
+      const onClick = (event: MouseEvent) => {
         clickCount += 1;
+        // Synthetic Gremlins clicks are intentionally absent from Event Timing
+        // in this WebKit build, so record the dispatch target/time ourselves.
+        // This is attribution only (no invented INP duration): the controller
+        // correlates the last dispatch before maxFrameAtMs.
+        recordEvent({
+          ts: Date.now(),
+          route: window.location.pathname,
+          kind: 'click-dispatch',
+          target: describe(event.target),
+        });
         send({ type: 'progress', runId: currentRunId!, clicks: clickCount, elapsedMs: Date.now() - startedAt });
       };
       const onErr = (e: ErrorEvent) => {
