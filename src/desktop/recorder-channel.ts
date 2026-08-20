@@ -49,6 +49,10 @@ export interface RunSummary {
    * the two are indistinguishable and every breach needs a fresh experiment.
    */
   maxFrameAtMs?: number;
+  /** Timer callbacks observed inside the worst rAF gap. */
+  maxFrameTimerTicks?: number;
+  /** Largest timer-heartbeat gap within the worst rAF interval. */
+  maxFrameTimerGapMs?: number;
   /**
    * Worst frame gap observed while the recorder was ARMING (importing the
    * ~226KB gremlins-runtime chunk, tagging blocked elements) — the instrument's

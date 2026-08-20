@@ -290,12 +290,28 @@ export default function RecorderHost() {
       let setupFrameDrops = 0;
       /** Offset of the worst graded frame within the measured window. */
       let maxFrameAtMs = 0;
+      let maxFrameTimerTicks = 0;
+      let maxFrameTimerGapMs = 0;
       /** False until arming completes; see the window-open below. */
       let measuring = false;
       let windowStart = 0;
       let windowStartedAt = 0;
       let rafStop = false;
       let lastFrame = performance.now();
+      // WebKit can throttle rAF while ordinary JS timers keep running. A tiny
+      // heartbeat lets the worst-frame verdict distinguish that compositor /
+      // scheduling shape from a genuinely blocked main thread.
+      const timerTicks: number[] = [];
+      let timerStop = false;
+      let timerId = 0;
+      const timerHeartbeat = () => {
+        if (timerStop) return;
+        const now = performance.now();
+        timerTicks.push(now);
+        while (timerTicks.length && timerTicks[0] < now - 3_000) timerTicks.shift();
+        timerId = window.setTimeout(timerHeartbeat, 16);
+      };
+      timerId = window.setTimeout(timerHeartbeat, 16);
       // A Tauri runner may briefly focus the controller webview between two
       // recorder rAF callbacks. If focus returns before the next callback, a
       // callback-time hasFocus() check alone cannot see the interruption and
@@ -321,6 +337,13 @@ export default function RecorderHost() {
           if (delta > maxFrameMs) {
             maxFrameMs = delta;
             maxFrameAtMs = now - windowStart;
+            const inside = timerTicks.filter((tick) => tick > lastFrame && tick <= now);
+            const points = [lastFrame, ...inside, now];
+            maxFrameTimerTicks = inside.length;
+            maxFrameTimerGapMs = points.slice(1).reduce(
+              (max, point, i) => Math.max(max, point - points[i]),
+              0,
+            );
           }
         } else {
           if (delta > frameDropThresholdMs) setupFrameDrops += 1;
@@ -421,6 +444,8 @@ export default function RecorderHost() {
       function finishRun() {
         clearTimeout(timer);
         rafStop = true;
+        timerStop = true;
+        clearTimeout(timerId);
         stopRun?.();
         stopRun = null;
         teardown();
@@ -440,6 +465,8 @@ export default function RecorderHost() {
           frameDrops,
           maxFrameMs: Math.round(maxFrameMs),
           maxFrameAtMs: Math.round(maxFrameAtMs),
+          maxFrameTimerTicks,
+          maxFrameTimerGapMs: Math.round(maxFrameTimerGapMs),
           setupMaxFrameMs: Math.round(setupMaxFrameMs),
           setupFrameDrops,
         };
