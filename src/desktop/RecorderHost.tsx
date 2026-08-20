@@ -293,6 +293,7 @@ export default function RecorderHost() {
       /** False until arming completes; see the window-open below. */
       let measuring = false;
       let windowStart = 0;
+      let windowStartedAt = 0;
       let rafStop = false;
       let lastFrame = performance.now();
       // A Tauri runner may briefly focus the controller webview between two
@@ -410,6 +411,7 @@ export default function RecorderHost() {
       // to the first chaos frame.
       lastFrame = performance.now();
       windowStart = lastFrame;
+      windowStartedAt = Date.now();
       measuring = true;
 
       // Stop after durationMs even if horde is still running or in dry-run.
@@ -428,6 +430,7 @@ export default function RecorderHost() {
         const summary: RunSummary = {
           runId: currentRunId!,
           startedAt,
+          windowStartedAt,
           endedAt: Date.now(),
           durationMs: Date.now() - startedAt,
           clicks: clickCount,

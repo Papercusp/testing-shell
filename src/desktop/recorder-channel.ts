@@ -30,6 +30,8 @@ export interface RecorderEvent {
 export interface RunSummary {
   runId: string;
   startedAt: number;
+  /** Epoch ms when arming finished and the graded frame window opened. */
+  windowStartedAt?: number;
   endedAt: number;
   durationMs: number;
   clicks: number;
