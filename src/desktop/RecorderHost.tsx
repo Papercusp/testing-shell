@@ -38,6 +38,37 @@ interface Gremlins {
   };
 }
 
+const BLOCKABLE_SELECTOR = 'button, [role="button"], a, [role="tab"], [role="menuitem"], [role="switch"]';
+
+function isBlocked(node: Element, blocklist: string[]): boolean {
+  const text = `${node.getAttribute('aria-label') ?? ''} ${node.textContent ?? ''}`.toLowerCase();
+  return blocklist.some((b) => b && text.includes(b.toLowerCase()));
+}
+
+/**
+ * Tag blocklisted controls within ONE changed subtree.
+ *
+ * The initial call uses `document`; MutationObserver calls use only each added
+ * node (or its parent for an added text node). This distinction is the WI-39527
+ * fix: the old observer re-ran document.querySelectorAll + textContent over the
+ * whole app after every chaos-triggered child mutation, a synchronous common
+ * path across all four surfaces that produced one catastrophic frame per run.
+ */
+export function tagBlockedElements(
+  root: ParentNode,
+  blocklist: string[],
+  blocked: Set<Element>,
+  force = false,
+): void {
+  const visit = (el: Element) => {
+    if (blocked.has(el) || (!force && !isBlocked(el, blocklist))) return;
+    blocked.add(el);
+    (el as HTMLElement).dataset.perfBlocked = '1';
+  };
+  if (root instanceof Element && root.matches(BLOCKABLE_SELECTOR)) visit(root);
+  root.querySelectorAll(BLOCKABLE_SELECTOR).forEach(visit);
+}
+
 export default function RecorderHost() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -198,11 +229,6 @@ export default function RecorderHost() {
       };
     }
 
-    function isBlocked(node: Element, blocklist: string[]): boolean {
-      const text = `${node.getAttribute('aria-label') ?? ''} ${node.textContent ?? ''}`.toLowerCase();
-      return blocklist.some((b) => b && text.includes(b.toLowerCase()));
-    }
-
     async function startRun(msg: Extract<ControllerMsg, { type: 'start' }>) {
       currentRunId = msg.runId;
       runEvents = [];
@@ -315,18 +341,30 @@ export default function RecorderHost() {
         // Gremlins doesn't expose pre-click hooks, so we tag blocked elements
         // with pointer-events:none for the duration of the run.
         const blocked = new Set<Element>();
-        const tagBlocked = () => {
-          const contentRoot = document.querySelector('main');
-          document.querySelectorAll('button, [role="button"], a, [role="tab"], [role="menuitem"], [role="switch"]').forEach((el) => {
-            const outsideContent = contentRoot instanceof Element ? !contentRoot.contains(el) : false;
-            if ((outsideContent || isBlocked(el, msg.blocklist)) && !blocked.has(el)) {
-              blocked.add(el);
-              (el as HTMLElement).dataset.perfBlocked = '1';
+        const contentRoot = document.querySelector('main');
+        const effectiveBlocklist = [...msg.blocklist];
+        // Controls outside the app content are always blocked. Tag them once;
+        // later mutations are scoped to their added subtree just like content.
+        document.querySelectorAll(BLOCKABLE_SELECTOR).forEach((el) => {
+          if (contentRoot instanceof Element && !contentRoot.contains(el) && !blocked.has(el)) {
+            blocked.add(el);
+            (el as HTMLElement).dataset.perfBlocked = '1';
+          }
+        });
+        tagBlockedElements(document, effectiveBlocklist, blocked);
+        const mutObs = new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              const root = node instanceof Element ? node : node.parentElement;
+              if (!root) continue;
+              if (contentRoot instanceof Element && !contentRoot.contains(root)) {
+                tagBlockedElements(root, effectiveBlocklist, blocked, true);
+              } else {
+                tagBlockedElements(root, effectiveBlocklist, blocked);
+              }
             }
-          });
-        };
-        tagBlocked();
-        const mutObs = new MutationObserver(tagBlocked);
+          }
+        });
         mutObs.observe(document.body, { childList: true, subtree: true });
 
         // Inject CSS to neuter blocked elements.

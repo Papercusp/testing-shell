@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { rollupRoutes, saveRun, loadRuns, clearRuns, type RecorderEvent, type RunSummary } from './recorder-channel';
+import { tagBlockedElements } from './RecorderHost';
 
 // jsdom's localStorage isn't reliable under this runner; use a deterministic
 // in-memory stub so the persistence round-trip is env-independent.
@@ -63,5 +64,22 @@ describe('RecorderHost frame accounting guard', () => {
     expect(source).toContain("document.addEventListener('visibilitychange', resetFrameClock)");
     expect(source).toContain("window.removeEventListener('blur', resetFrameClock)");
     expect(source).toContain("document.removeEventListener('visibilitychange', resetFrameClock)");
+  });
+
+  it('tags only the changed subtree during mutation handling — never rescans document', () => {
+    document.body.innerHTML = '<main><button aria-label="safe">old</button></main>';
+    const added = document.createElement('section');
+    added.innerHTML = '<button aria-label="delete account">new</button>';
+    document.querySelector('main')!.appendChild(added);
+    const documentScan = vi.spyOn(document, 'querySelectorAll');
+    const subtreeScan = vi.spyOn(added, 'querySelectorAll');
+    const blocked = new Set<Element>();
+
+    tagBlockedElements(added, ['delete'], blocked);
+
+    expect(documentScan).not.toHaveBeenCalled();
+    expect(subtreeScan).toHaveBeenCalledTimes(1);
+    expect(blocked).toHaveLength(1);
+    expect((added.querySelector('button') as HTMLElement).dataset.perfBlocked).toBe('1');
   });
 });
