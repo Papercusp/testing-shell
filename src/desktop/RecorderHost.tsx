@@ -51,8 +51,9 @@ function isBlocked(node: Element, blocklist: string[]): boolean {
  * The initial call uses `document`; MutationObserver calls use only each added
  * node (or its parent for an added text node). This distinction is the WI-39527
  * fix: the old observer re-ran document.querySelectorAll + textContent over the
- * whole app after every chaos-triggered child mutation, a synchronous common
- * path across all four surfaces that produced one catastrophic frame per run.
+ * whole app after every chaos-triggered child mutation — a confirmed
+ * synchronous O(N) common path across all four surfaces and therefore the
+ * first mechanism to remove before attributing their shared long frame.
  */
 export function tagBlockedElements(
   root: ParentNode,
