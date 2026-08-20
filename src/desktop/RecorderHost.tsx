@@ -298,6 +298,7 @@ export default function RecorderHost() {
       let windowStartedAt = 0;
       let rafStop = false;
       let lastFrame = performance.now();
+      let lastSetupSevereAt = lastFrame;
       // WebKit can throttle rAF while ordinary JS timers keep running. A tiny
       // heartbeat lets the worst-frame verdict distinguish that compositor /
       // scheduling shape from a genuinely blocked main thread.
@@ -347,6 +348,7 @@ export default function RecorderHost() {
           }
         } else {
           if (delta > frameDropThresholdMs) setupFrameDrops += 1;
+          if (delta > frameDropThresholdMs) lastSetupSevereAt = now;
           if (delta > setupMaxFrameMs) setupMaxFrameMs = delta;
         }
         lastFrame = now;
@@ -421,7 +423,18 @@ export default function RecorderHost() {
           blocked.forEach((el) => delete (el as HTMLElement).dataset.perfBlocked);
         };
 
-        horde.unleash({ nb: Math.floor(msg.durationMs / 50) }).catch(() => { /* horde aborted */ });
+      }
+
+      // The recorder window navigates to a real route before arming. A fixed
+      // 750ms delay was insufficient: async route data/hydration produced a
+      // 673ms frame at +815ms even with dryRun=true and zero clicks (WI-39527).
+      // Wait until the setup bucket has seen 500ms without a severe frame,
+      // bounded to 3s so persistent background jank remains visible rather than
+      // waiting forever. Gremlins starts only AFTER this gate, so setup cannot
+      // consume or hide any chaos interaction.
+      const settleDeadline = performance.now() + 3_000;
+      while (performance.now() < settleDeadline && performance.now() - lastSetupSevereAt < 500) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
       }
 
       // ARMING COMPLETE — open the measured window. Deliberately placed OUTSIDE
@@ -436,6 +449,7 @@ export default function RecorderHost() {
       windowStart = lastFrame;
       windowStartedAt = Date.now();
       measuring = true;
+      horde?.unleash({ nb: Math.floor(msg.durationMs / 50) }).catch(() => { /* horde aborted */ });
 
       // Stop after durationMs even if horde is still running or in dry-run.
       const timer = setTimeout(() => finishRun(), msg.durationMs);

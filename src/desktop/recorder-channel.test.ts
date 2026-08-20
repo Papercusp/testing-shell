@@ -82,4 +82,11 @@ describe('RecorderHost frame accounting guard', () => {
     expect(blocked).toHaveLength(1);
     expect((added.querySelector('button') as HTMLElement).dataset.perfBlocked).toBe('1');
   });
+
+  it('opens the measured window only after the frame-quiet gate, then starts Gremlins', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/desktop/RecorderHost.tsx'), 'utf8');
+    expect(source).toContain('performance.now() - lastSetupSevereAt < 500');
+    expect(source).toContain('const settleDeadline = performance.now() + 3_000');
+    expect(source.indexOf('measuring = true')).toBeLessThan(source.indexOf('horde?.unleash'));
+  });
 });
