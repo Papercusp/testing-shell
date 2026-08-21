@@ -24,7 +24,7 @@
  */
 
 import { readdir, stat } from 'node:fs/promises';
-import { existsSync, type Dirent } from 'node:fs';
+import { existsSync, readFileSync, statSync, type Dirent } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 
 const IGNORE_DIRS = new Set([
@@ -228,6 +228,30 @@ export async function expandGlobs(
  * ignores after the first call is not a cache, it is a bug.
  */
 const _rootCache = new Map<string, string>();
+
+/**
+ * A `.git` entry is not always a repository root marker. Submodules carry a
+ * `.git` FILE whose gitdir points into `.git/modules`; stopping there makes
+ * every path reported relative to the submodule instead of the superproject.
+ * Linked worktrees also carry a `.git` FILE, but their gitdir points into
+ * `.git/worktrees` and the worktree itself is a valid root.
+ */
+function isGitRootMarker(dir: string): boolean {
+  try {
+    const entry = statSync(join(dir, '.git'));
+    if (entry.isDirectory()) return true;
+    if (!entry.isFile()) return false;
+
+    const marker = readFileSync(join(dir, '.git'), 'utf8').trim();
+    const match = /^gitdir:\s*(.+)$/i.exec(marker);
+    if (!match) return false;
+    const gitdir = match[1].trim().replace(/\\/g, '/');
+    return gitdir.includes('/worktrees/');
+  } catch {
+    return false;
+  }
+}
+
 export function inferWorkspaceRoot(from = process.cwd()): string {
   const start = resolve(from);
   const cached = _rootCache.get(start);
@@ -235,7 +259,7 @@ export function inferWorkspaceRoot(from = process.cwd()): string {
 
   let dir = start;
   while (true) {
-    if (existsSync(join(dir, 'pnpm-workspace.yaml')) || existsSync(join(dir, '.git'))) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml')) || isGitRootMarker(dir)) {
       _rootCache.set(start, dir);
       return dir;
     }

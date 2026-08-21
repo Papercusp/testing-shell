@@ -131,6 +131,20 @@ describe('inferWorkspaceRoot', () => {
     await mkdir(join(root, 'mixed', 'inner', 'deep'), { recursive: true });
     await writeFile(join(root, 'mixed', 'pnpm-workspace.yaml'), 'packages: []');
     await mkdir(join(root, 'mixed', 'inner', '.git'), { recursive: true });
+    // A submodule has a .git FILE pointing into the superproject's modules
+    // directory. It must not become the workspace root.
+    await mkdir(join(root, 'super', '.git'), { recursive: true });
+    await mkdir(join(root, 'super', 'libs', 'submodule', 'nested'), { recursive: true });
+    await writeFile(
+      join(root, 'super', 'libs', 'submodule', '.git'),
+      'gitdir: ../../.git/modules/submodule\n',
+    );
+    // A linked worktree also has a .git FILE, but it is itself a valid root.
+    await mkdir(join(root, 'linked-worktree', 'nested'), { recursive: true });
+    await writeFile(
+      join(root, 'linked-worktree', '.git'),
+      'gitdir: /tmp/project/.git/worktrees/linked-worktree\n',
+    );
   });
 
   afterAll(async () => {
@@ -185,6 +199,20 @@ describe('inferWorkspaceRoot', () => {
     const direct = inferWorkspaceRoot(join(root, 'gitonly', 'inner'));
     const viaDotDot = inferWorkspaceRoot(join(root, 'gitonly', 'inner', 'deep', '..'));
     expect(viaDotDot).toBe(direct);
+  });
+
+  it('skips a submodule .git file and keeps walking to the superproject root', () => {
+    _resetWorkspaceRootCache();
+    expect(inferWorkspaceRoot(join(root, 'super', 'libs', 'submodule', 'nested'))).toBe(
+      join(root, 'super'),
+    );
+  });
+
+  it('recognises a linked-worktree .git file as a root marker', () => {
+    _resetWorkspaceRootCache();
+    expect(inferWorkspaceRoot(join(root, 'linked-worktree', 'nested'))).toBe(
+      join(root, 'linked-worktree'),
+    );
   });
 });
 
