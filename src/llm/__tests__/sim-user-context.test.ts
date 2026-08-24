@@ -46,12 +46,17 @@ interface CapturedCall {
 }
 
 function makeCapturingLlmCall(calls: CapturedCall[]): LlmCallFn {
+  let simTurns = 0;
   return async (opts) => {
     const system = opts.system ?? '';
     const isJudge = system.includes('external reviewer');
     const body = opts.messages.map((m) => m.content).join('\n');
     calls.push({ role: isJudge ? 'judge' : 'sim', text: `${system}\n${body}` });
 
+    // The sim must take at least one real turn: with zero SUT turns the
+    // runner's SUT-health gate marks the run inconclusive and SKIPS the
+    // judge entirely, which would leave the judge-channel assertions
+    // vacuous rather than failing loudly.
     const json = isJudge
       ? {
           summary: 'nominal',
@@ -60,7 +65,9 @@ function makeCapturingLlmCall(calls: CapturedCall[]): LlmCallFn {
           agrees_with_deterministic_asserts: true,
           novel_failures: [],
         }
-      : { thought: 'done', action: { kind: 'declare_success', reason: 'done' } };
+      : simTurns++ === 0
+        ? { thought: 'ask', action: { kind: 'text', text: 'hello, can you help?' } }
+        : { thought: 'done', action: { kind: 'declare_success', reason: 'done' } };
 
     const result: LlmCallResult = {
       text: JSON.stringify(json),

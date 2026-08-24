@@ -162,7 +162,7 @@ export function lintScenario(s: Scenario, opts: LintOpts = {}): LintViolation[] 
     violation(
       'description',
       'warn',
-      'description should be a substantive paragraph (≥20 chars) — the sim-user reads it',
+      'description should be a substantive paragraph (≥20 chars) — the judge reads it, and so does the sim-user unless you set simUserContext',
     );
   }
 
