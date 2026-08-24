@@ -29,7 +29,7 @@ import { judgeRun, buildInconclusiveJudge } from './judge';
 import { resolveJudgeModel } from './judges/registry';
 import { lookupBlend } from './personas/blends';
 import { resolvePersona } from './personas/traits';
-import { SimUser, type SimAction } from './sim-user';
+import { SimUser, resolveSimUserContext, type SimAction } from './sim-user';
 import type {
   CardEvent,
   ChatSession,
@@ -392,7 +392,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     goal: scenario.goal,
     model: simModel,
     llmCall: deps.llmCall,
-    scenarioDescription: scenario.description,
+    // EI-18767396817867279: NEVER pass `scenario.description` straight through
+    // here — it is judge-facing text and the sim-user volunteers concrete facts
+    // from it, which silently collapses any negative-knowledge scenario.
+    // `resolveSimUserContext` is the seam that lets an author opt out.
+    scenarioDescription: resolveSimUserContext(scenario),
     ...(args.seed !== undefined && { temperature: 0 }),
   });
 

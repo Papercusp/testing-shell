@@ -14,7 +14,29 @@
 
 import { composePersonaPrompt } from './personas/traits';
 import type { LlmCallFn } from './deps';
-import type { CardEvent, GoalSpec, Persona, TurnResult } from './types';
+import type { CardEvent, GoalSpec, Persona, Scenario, TurnResult } from './types';
+
+/**
+ * Resolve what the SIM-USER is told about the scenario — the one place that
+ * decides it, so the judge channel and the sim-user channel cannot silently
+ * become the same string again.
+ *
+ * `description` is judge-facing AND sim-user-facing, and the sim-user is told
+ * to name concrete details from it, so a fact written there is volunteered to
+ * the system under test. `simUserContext` is how an author opts out of that:
+ * a string overrides what the sim-user sees, `false` gives it no scenario
+ * context at all. Omitted keeps the historical default.
+ *
+ * Returning `undefined` suppresses the `## Scenario context` block entirely.
+ *
+ * EI-18767396817867279.
+ */
+export function resolveSimUserContext(
+  scenario: Pick<Scenario, 'description' | 'simUserContext'>,
+): string | undefined {
+  if (scenario.simUserContext === false) return undefined;
+  return scenario.simUserContext ?? scenario.description;
+}
 
 export type SimAction =
   | { kind: 'text'; thought: string; text: string }

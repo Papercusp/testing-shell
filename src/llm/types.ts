@@ -242,6 +242,28 @@ export interface Scenario {
   version: number;
   target: string;
   description: string;
+  /**
+   * What the SIM-USER is told about the scenario, decoupled from what the
+   * JUDGE is told.
+   *
+   * `description` reaches BOTH the judge and the sim-user, and the sim-user is
+   * instructed to name concrete details from it — so every fact written there
+   * is volunteered to the system under test in conversation. That is harmless
+   * for a scenario asserting only behavior, and FATAL for one whose validity
+   * depends on the agent not knowing something (a matched A/B, an
+   * information-asymmetry test, a negative-knowledge control). It fails
+   * silently: the runs complete and the numbers look plausible.
+   *
+   * - omitted    → the sim-user sees `description` (unchanged default)
+   * - `string`   → the sim-user sees THIS instead; the judge still sees the
+   *                full `description`, so grading detail no longer has to leak
+   * - `false`    → the sim-user gets NO scenario context at all — a true
+   *                negative-knowledge control; it learns the world only from
+   *                the conversation and `toolOverride`
+   *
+   * EI-18767396817867279 — cost a scrapped 3-arm run on P-011.
+   */
+  simUserContext?: string | false;
   persona: Persona | PersonaTraits | string; // blend name | inline traits | Persona
   goal: GoalSpec;
   setup?: ScenarioSetup;
