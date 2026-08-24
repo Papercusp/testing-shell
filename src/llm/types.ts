@@ -83,6 +83,8 @@ export interface ScenarioVariant {
 export interface SessionOptions {
   /** Unique per-run identity used as `uiClientId` for telemetry filtering. */
   runId: string;
+  /** The resolved SUT model for this run; targets must not independently re-default it. */
+  sutModel?: string;
   /** Workspace mode — see §4.5. */
   workspaceMode: 'isolated' | 'real';
   /** Transport — see §10.4. */

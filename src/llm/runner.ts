@@ -376,6 +376,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   try {
     session = await target.open({
       runId,
+      sutModel,
       workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
       transport: scenario.transport ?? 'http-sse',
       dispatchOverride: scenario.toolOverride,

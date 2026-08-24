@@ -123,6 +123,7 @@ describe('runner variant knob (P-001)', () => {
     const report = await runScenario(makeScenario(), { variant: VARIANT }, makeDeps(target));
     expect(seenOpens).toHaveLength(1);
     expect(seenOpens[0].variant).toEqual(VARIANT);
+    expect(seenOpens[0].sutModel).toBe('claude-sonnet-4-6');
     expect(report.runs[0].summary.variantId).toBe('scout-idea-42');
   });
 
@@ -156,6 +157,13 @@ describe('runner variant knob (P-001)', () => {
     expect(seenOpens).toHaveLength(1);
     expect(seenOpens[0].variant).toBeUndefined();
     expect(report.runs[0].summary.variantId).toBeUndefined();
+  });
+
+  it('delivers an explicit resolved SUT model to target.open', async () => {
+    const seenOpens: SessionOptions[] = [];
+    const target = makeTarget({ seenOpens });
+    await runScenario(makeScenario(), { sutModel: 'gpt-5.6-sol:xhigh' }, makeDeps(target));
+    expect(seenOpens[0].sutModel).toBe('gpt-5.6-sol:xhigh');
   });
 
   it('variant repeats across the whole matrix (every run is the same candidate)', async () => {
