@@ -58,6 +58,13 @@ export {
   identityFor,
 } from './identity';
 
+// Derived rubric versions (WI-41678 / EI-21449130141174031). A rubric's version
+// feeds computeIdentityHash, so it decides which stored runs are comparable.
+// Derive it from the rubric's version-free CONTENT instead of hand-maintaining a
+// literal, or an anchor edit keeps a stale identity and makes incomparable runs
+// look like one continuous trend.
+export { deriveRubricVersion } from './rubric-version';
+
 // Persona blends + trait composition.
 export * from './personas/blends';
 export { composePersonaPrompt, resolvePersona } from './personas/traits';
