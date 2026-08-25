@@ -13,6 +13,8 @@
  * no host backend.
  */
 
+import { createHash } from 'node:crypto';
+
 import { computeFindingShape } from './identity';
 import type { LlmCallFn } from './deps';
 import type {
@@ -322,7 +324,7 @@ function buildJudgeUserPrompt(opts: {
   ].join('\n');
 }
 
-function formatTranscript(turns: TurnResult[]): string {
+function formatTranscript(turns: readonly TurnResult[]): string {
   if (turns.length === 0) return '(empty transcript)';
   const lines: string[] = [];
   for (let i = 0; i < turns.length; i++) {
@@ -349,7 +351,25 @@ function formatCard(c: CardEvent): string {
   return `${c.kind}${opts}${c.voiceAnswerable ? '(voice)' : ''}`;
 }
 
-function formatTelemetry(run: RunSummary): string {
+/**
+ * The ONLY `RunSummary` fields that reach the judge's prompt.
+ *
+ * Narrowed deliberately (WI-41675 / plan decision D-012): the previous
+ * `RunSummary` parameter made every field on that large type look
+ * prompt-visible, and callers synthesizing a run for the judge could not tell
+ * which of the values they were filling in would actually be read by the
+ * model. Three separate defects came out of exactly that ambiguity — a
+ * hand-framed transcript, a `finishReason`, and per-turn telemetry numbers all
+ * reaching the prompt from outside the caller's own judging-input hash. The
+ * signature now answers the question.
+ */
+export interface JudgePromptRunFields {
+  turns: readonly TurnResult[];
+  totalCostUsd: number;
+  continueChainRows: readonly unknown[];
+}
+
+function formatTelemetry(run: JudgePromptRunFields): string {
   const rows: string[] = [];
   for (let i = 0; i < run.turns.length; i++) {
     const t = run.turns[i];
@@ -371,6 +391,133 @@ function formatViolations(violations: Violation[]): string {
     )
     .join('\n');
 }
+
+// =============================================================================
+// Prompt-scaffold version (WI-41675 / plan decision D-012)
+// =============================================================================
+//
+// `judgeRun` composes the model's entire input from exactly four sources: the
+// system prompt, the formatted transcript, the telemetry strip and the
+// violations block. A caller owns only the VALUES it passes in. The rules, the
+// score-5 anchor, the output schema, the tool-registry branch and every
+// structural label around them belong to THIS module — and until now no
+// consumer's rubric version, run identity hash or grade cache key could see
+// any of it. Editing one line of `## Rules` changed every judged prompt on the
+// platform while leaving already-paid grades reachable under an unchanged key,
+// answering for a prompt that no longer existed. Nothing reported it.
+//
+// The fix derives an identity for that static surface rather than restating it
+// in a constant a later edit could bypass: the real builders are composed over
+// fixed sentinel inputs and the result is hashed. Static text added ANYWHERE
+// inside them — including inside the `knownToolNames` branch, which is probed
+// both ways — moves this hash on its own, with no bump to remember.
+//
+// Consumers that persist or compare judged output MUST fold this into their
+// own version identity; `search-relevance` (packages/operator-core/lib/search/
+// bench/judge-agreement.ts) is the worked example.
+
+/** Sentinel standing in for every caller-owned value while probing. */
+const SCAFFOLD_PROBE = '<<scaffold-probe>>';
+
+const SCAFFOLD_PROBE_RUBRIC: JudgeRubric = {
+  version: SCAFFOLD_PROBE,
+  axes: [
+    {
+      id: SCAFFOLD_PROBE,
+      description: SCAFFOLD_PROBE,
+      anchors: { bad: SCAFFOLD_PROBE, ideal: SCAFFOLD_PROBE },
+    },
+  ],
+};
+
+const SCAFFOLD_PROBE_OPTS: JudgeOpts = {
+  model: SCAFFOLD_PROBE,
+  rubric: SCAFFOLD_PROBE_RUBRIC,
+  scenarioId: SCAFFOLD_PROBE,
+  scenarioDescription: SCAFFOLD_PROBE,
+  personaSummary: SCAFFOLD_PROBE,
+  goalSummary: SCAFFOLD_PROBE,
+};
+
+/** Two turns: one minimal, one exercising every optional line. */
+const SCAFFOLD_PROBE_TURNS: readonly TurnResult[] = [
+  {
+    assistantText: '',
+    toolCalls: [],
+    cards: [],
+    controlTags: [],
+    costUsd: 0,
+    latencyMs: 0,
+    finishReason: 'done',
+    rawSseTape: [],
+  },
+  {
+    assistantText: SCAFFOLD_PROBE,
+    toolCalls: [{ name: SCAFFOLD_PROBE, input: { probe: SCAFFOLD_PROBE } }],
+    cards: [
+      {
+        kind: SCAFFOLD_PROBE,
+        options: [{ id: SCAFFOLD_PROBE, label: SCAFFOLD_PROBE }],
+        voiceAnswerable: true,
+      },
+    ],
+    controlTags: [{ tag: 'continue' }],
+    costUsd: 0,
+    latencyMs: 0,
+    finishReason: 'error',
+    error: SCAFFOLD_PROBE,
+    recoveredFromDisconnectAfterCard: true,
+    rawSseTape: [],
+  },
+];
+
+const SCAFFOLD_PROBE_RUN: JudgePromptRunFields = {
+  turns: SCAFFOLD_PROBE_TURNS,
+  totalCostUsd: 0,
+  continueChainRows: [{}],
+};
+
+const SCAFFOLD_PROBE_VIOLATION: Violation = {
+  severity: 'error',
+  assertKind: SCAFFOLD_PROBE,
+  evidenceTurnIdx: 0,
+  claim: SCAFFOLD_PROBE,
+};
+
+/**
+ * Every static-text surface this module contributes to a judge prompt, composed
+ * by the REAL builders over sentinel inputs. Exported so a guard test can assert
+ * what the version covers instead of taking the coverage on trust.
+ */
+export function composeJudgeScaffoldProbe(): string {
+  return [
+    // Both branches: the tool-registry section and the no-registry rule are
+    // mutually exclusive static text, so each needs its own probe.
+    buildJudgeSystemPrompt(SCAFFOLD_PROBE_OPTS),
+    buildJudgeSystemPrompt({ ...SCAFFOLD_PROBE_OPTS, knownToolNames: [SCAFFOLD_PROBE] }),
+    buildJudgeUserPrompt({
+      transcript: SCAFFOLD_PROBE,
+      telemetryStrip: SCAFFOLD_PROBE,
+      violationsBlock: SCAFFOLD_PROBE,
+      rubric: SCAFFOLD_PROBE_RUBRIC,
+    }),
+    formatTranscript([]),
+    formatTranscript(SCAFFOLD_PROBE_TURNS),
+    formatTelemetry(SCAFFOLD_PROBE_RUN),
+    // Both branches again: the "all asserts passed" string is static text too.
+    formatViolations([]),
+    formatViolations([SCAFFOLD_PROBE_VIOLATION]),
+  ].join('\n<<scaffold-section>>\n');
+}
+
+/**
+ * Derived identity of this module's static prompt scaffolding. Fold it into any
+ * version that keys persisted or compared judge output.
+ */
+export const JUDGE_PROMPT_SCAFFOLD_VERSION = createHash('sha256')
+  .update(composeJudgeScaffoldProbe())
+  .digest('hex')
+  .slice(0, 12);
 
 function truncJson(v: unknown): string {
   try {

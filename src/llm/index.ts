@@ -28,7 +28,18 @@ export {
 } from './runner';
 
 // Judge.
-export { judgeRun, buildInconclusiveJudge, type JudgeOpts } from './judge';
+export {
+  judgeRun,
+  buildInconclusiveJudge,
+  // Derived identity of the judge prompt's STATIC scaffolding (WI-41675 / D-012).
+  // Any consumer that persists or compares judged output must fold this into its
+  // own rubric/cache version, or an edit to the rules or output schema here
+  // silently leaves paid grades keyed to a prompt that no longer exists.
+  JUDGE_PROMPT_SCAFFOLD_VERSION,
+  composeJudgeScaffoldProbe,
+  type JudgeOpts,
+  type JudgePromptRunFields,
+} from './judge';
 
 // Sim-user.
 export { SimUser, type SimUserOpts, type SimNextInput, type SimAction } from './sim-user';
