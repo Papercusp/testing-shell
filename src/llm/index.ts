@@ -51,12 +51,9 @@ export { evaluateAsserts, registerEvaluator, type AssertEvaluator } from './asse
 export * from './pipeline';
 
 // Identity hashing.
-export {
-  computeIdentityHash,
-  computeScenarioHash,
-  computeFindingShape,
-  identityFor,
-} from './identity';
+// `identityFor` was removed by WI-41685: a zero-caller positional wrapper that,
+// left un-updated, would have been a scaffold-BLIND second identity path.
+export { computeIdentityHash, computeScenarioHash, computeFindingShape } from './identity';
 
 // Derived rubric versions (WI-41678 / EI-21449130141174031). A rubric's version
 // feeds computeIdentityHash, so it decides which stored runs are comparable.
