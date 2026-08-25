@@ -29,6 +29,7 @@ const BASE = {
   rubricVersion: '1.0.0',
   sutModel: 'claude-sonnet-4-6',
   judgeModel: 'claude-sonnet-4-6',
+  judgeScaffoldVersion: 'abcdef012345',
 };
 
 describe('computeIdentityHash', () => {
@@ -44,6 +45,11 @@ describe('computeIdentityHash', () => {
     ['rubricVersion',   { rubricVersion: '1.0.1' }],
     ['sutModel',        { sutModel: 'claude-opus-4-7' }],
     ['judgeModel',      { judgeModel: 'claude-opus-4-7' }],
+    // WI-41685 / D-013: the judge prompt's own static scaffolding is an input.
+    // Before this, editing a rule line or the output schema in judge.ts changed
+    // every judged prompt while leaving runs comparable under an unchanged
+    // identity — a trend line that looked continuous across a real prompt change.
+    ['judgeScaffoldVersion', { judgeScaffoldVersion: '0123456789ab' }],
   ])('changes identity when %s changes', (_label, override) => {
     expect(computeIdentityHash({ ...BASE, ...override })).not.toBe(computeIdentityHash(BASE));
   });

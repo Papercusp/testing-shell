@@ -25,7 +25,7 @@ import { hostname } from 'node:os';
 import { evaluateAsserts } from './asserts/index';
 import type { RunnerDeps } from './deps';
 import { computeIdentityHash, computeScenarioHash } from './identity';
-import { judgeRun, buildInconclusiveJudge } from './judge';
+import { judgeRun, buildInconclusiveJudge, JUDGE_PROMPT_SCAFFOLD_VERSION } from './judge';
 import { resolveJudgeModel } from './judges/registry';
 import { lookupBlend } from './personas/blends';
 import { resolvePersona } from './personas/traits';
@@ -306,6 +306,9 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     rubricVersion: scenario.rubric.version,
     sutModel,
     judgeModel,
+    // This module imports both halves, which is why the scaffold identity is
+    // supplied here rather than read inside identity.ts (that edge would cycle).
+    judgeScaffoldVersion: JUDGE_PROMPT_SCAFFOLD_VERSION,
   });
 
   // Claim this (scenario × identity × matrix-index) tuple so parallel
