@@ -92,6 +92,8 @@ export interface LlmCallOpts {
    * expose response start.
    */
   onResponseStart?: () => void;
+  /** Stable caller identity for inference-gateway owner attribution. */
+  ownerId?: string;
 }
 
 export interface LlmCallResult {
