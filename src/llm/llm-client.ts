@@ -102,6 +102,8 @@ export interface LlmCallResult {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** Provider terminal reason when available (`end_turn`, `max_tokens`, …). */
+  stopReason?: string | null;
   raw: unknown;
 }
 
