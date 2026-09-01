@@ -44,17 +44,34 @@ describe('applyRoleGlobs', () => {
   });
 
   it('leaves non-role sections untouched', () => {
-    const out = applyRoleGlobs(domains, { unit: ['libs/**/*.test.ts'] });
+    const out = applyRoleGlobs(domains, {
+      endpoints: ['apps/**/*.test.ts'],
+      unit: ['libs/**/*.test.ts'],
+    });
     expect(out[1].sections[1].globs).toEqual(['always/**/*.test.ts']);
   });
 
-  it('resolves an unmapped role to an empty glob list (renders empty, not operator paths)', () => {
-    const out = applyRoleGlobs(domains, {});
+  it('requires every declared role to have an explicit binding', () => {
+    expect(() => applyRoleGlobs(domains, { unit: ['libs/**/*.test.ts'] })).toThrow(
+      /missing role bindings: endpoints/,
+    );
+  });
+
+  it('rejects supplied bindings that no domain declares', () => {
+    expect(() => applyRoleGlobs(domains, {
+      endpoints: ['apps/**/*.test.ts'],
+      unit: ['libs/**/*.test.ts'],
+      stale: ['nowhere/**/*.test.ts'],
+    })).toThrow(/surplus role bindings: stale/);
+  });
+
+  it('accepts an explicit empty binding instead of confusing omission with intent', () => {
+    const out = applyRoleGlobs(domains, { endpoints: [], unit: ['libs/**/*.test.ts'] });
     expect(out[0].sections[0].globs).toEqual([]);
   });
 
   it('does not mutate the input domains', () => {
-    applyRoleGlobs(domains, { endpoints: ['x/**'] });
+    applyRoleGlobs(domains, { endpoints: ['x/**'], unit: ['y/**'] });
     expect(domains[0].sections[0].globs).toBeUndefined();
   });
 });

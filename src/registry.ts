@@ -201,6 +201,19 @@ export function applyRoleGlobs(
   domains: TestDomain[],
   roleGlobs: Record<string, string[]>,
 ): TestDomain[] {
+  const declaredRoles = new Set(
+    domains.flatMap((domain) => domain.sections.flatMap((section) => (section.role ? [section.role] : []))),
+  );
+  const suppliedRoles = new Set(Object.keys(roleGlobs));
+  const missing = [...declaredRoles].filter((role) => !suppliedRoles.has(role)).sort();
+  const surplus = [...suppliedRoles].filter((role) => !declaredRoles.has(role)).sort();
+  if (missing.length || surplus.length) {
+    const details = [
+      missing.length ? `missing role bindings: ${missing.join(', ')}` : '',
+      surplus.length ? `surplus role bindings: ${surplus.join(', ')}` : '',
+    ].filter(Boolean).join('; ');
+    throw new Error(`applyRoleGlobs: role binding parity violation — ${details}`);
+  }
   return domains.map((d) => ({
     ...d,
     sections: d.sections.map((s) =>
