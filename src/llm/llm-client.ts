@@ -104,6 +104,9 @@ export interface LlmCallResult {
   costUsd: number;
   /** Provider terminal reason when available (`end_turn`, `max_tokens`, …). */
   stopReason?: string | null;
+  /** Gateway account that actually served the request, when exposed by the
+   * transport's `x-papercusp-routed-account` response header. */
+  servedAccount?: string;
   raw: unknown;
 }
 
