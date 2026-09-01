@@ -20,11 +20,9 @@
  * with a unique id and add to the export array below; the SPA renders it
  * automatically via the shared <DomainTestPanel>.
  *
- * Existing 8 tabs adopt this registry as descriptor only (P-006a):
- * bespoke React UI stays mounted via the `custom` slot.
+ * Existing bespoke tabs are mounted by each host's `customTabs` map; the
+ * registry remains the server-safe data/run descriptor.
  */
-
-import type { ReactNode } from 'react';
 
 /**
  * Discriminated union of every way a single test can be run from the UI.
@@ -78,21 +76,6 @@ export interface TestSection {
 }
 
 /**
- * One subtab. Maps to a single entry in /admin/testing's left-column list.
- *
- * `custom`: an existing-tab bespoke React component (per P-006a). When
- * present, <DomainTestPanel> mounts it inside its shell instead of the
- * default sections list. The 8 existing tabs (test-runs, live, memory,
- * chaos, ai, routes, packaged, llm) declare custom; the 12 new tabs
- * leave it undefined and render the section list.
- *
- * `healthStripId`: opaque identifier the SPA maps to a per-domain health
- * widget. Strips show test-related signals only (P-033): last full-suite
- * duration, last failure timestamp, flaky rate. Operational health
- * (voice spend, lock queue, etc.) belongs on per-domain admin pages,
- * not here.
- */
-/**
  * Display tiers a domain can belong to. `quick` / `domain` / `surface` are
  * the /admin/testing taxonomy; `universal` marks domains that apply to ANY
  * project (declared in registry/universal.ts, shown under "Universal" in the
@@ -107,8 +90,6 @@ export interface TestDomain {
   description: string;
   tier: TestTier;
   sections: TestSection[];
-  healthStripId?: string;
-  custom?: () => ReactNode;
 }
 
 /**
