@@ -46,13 +46,63 @@ const SUPPORTED_KEYWORDS = new Set([
   'readOnly', 'writeOnly', '$comment', '$schema', '$id', 'additionalItems',
 ]);
 
-/** String `format` values present in the live corpus, with a faithful generator for each. */
+/**
+ * Keywords that carry NO constraint, so a merge across combinator branches may simply take one.
+ * Kept separate from `SUPPORTED_KEYWORDS` because "safe to ignore" and "safe to overwrite during
+ * an intersection" are different questions.
+ */
+const ANNOTATION_KEYWORDS = new Set([
+  'description', 'title', 'default', 'examples', 'deprecated',
+  'readOnly', 'writeOnly', '$comment', '$schema', '$id',
+]);
+
+const LOWER_ALNUM = 'abcdefghijklmnopqrstuvwxyz0123456789'.split('');
+
+/** Lower-case alphanumeric run of a bounded length — the safe building block for `format` values. */
+function alnumRun(minLength: number, maxLength: number): fc.Arbitrary<string> {
+  return fc
+    .array(fc.constantFrom(...LOWER_ALNUM), { minLength, maxLength })
+    .map((chars) => chars.join(''));
+}
+
+/**
+ * String `format` values present in the live corpus, with a faithful generator for each.
+ *
+ * These are deliberately CANONICAL rather than maximally diverse. In the live corpus a `format` is
+ * routinely paired with a stricter `pattern` (RFC 3339 for `date-time`, a hand-written address
+ * regex for `email`), and `buildString` composes the two by filtering. A generator that ranges
+ * over the whole format-legal space would be filtered down to nothing; one that emits the
+ * conventional shape satisfies both. Widening any of these means re-running the corpus probe.
+ */
 const FORMAT_ARBITRARIES: Record<string, () => fc.Arbitrary<string>> = {
   uuid: () => fc.uuid(),
-  'date-time': () => fc.date({ noInvalidDate: true }).map((d) => d.toISOString()),
+  /**
+   * Bounded to 1970..2100 and always UTC `Z`.
+   *
+   * An UNBOUNDED `fc.date()` reaches years ±275760, whose ISO form ("+275760-09-13T00:00:00.000Z",
+   * "-271821-04-20T00:00:00.000Z") is not valid RFC 3339: it fails ajv's `format: date-time` AND
+   * every date-time `pattern` in the corpus. That bug shipped green because the test's ajv had no
+   * `ajv-formats` registered, so `format` was silently ignored — see the test's header.
+   */
+  'date-time': () =>
+    fc
+      .date({
+        min: new Date(Date.UTC(1970, 0, 1)),
+        max: new Date(Date.UTC(2100, 0, 1)),
+        noInvalidDate: true,
+      })
+      .map((d) => d.toISOString()),
   uri: () => fc.webUrl(),
   url: () => fc.webUrl(),
-  email: () => fc.emailAddress(),
+  /**
+   * Narrower than `fc.emailAddress()` on purpose. `fc.emailAddress` legitimately emits quoted and
+   * symbol-rich local parts (`{`, `|`, `'`) that every `pattern` beside `format: email` in this
+   * corpus rejects, so the pattern filter would starve.
+   */
+  email: () =>
+    fc
+      .tuple(alnumRun(1, 10), alnumRun(1, 8), fc.constantFrom('com', 'org', 'net', 'io', 'dev'))
+      .map(([local, host, tld]) => `${local}@${host}.${tld}`),
 };
 
 /** Raised when the schema uses a keyword this converter does not model. */
@@ -110,6 +160,108 @@ function resolveRef(ref: string, root: JsonSchema, path: string): JsonSchema {
   return node;
 }
 
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqual(v, b[i]));
+  }
+  if (!isPlainObject(a) || !isPlainObject(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  return ka.length === kb.length && ka.every((k) => k in b && deepEqual(a[k], b[k]));
+}
+
+function asNumber(v: unknown, path: string, keyword: string): number {
+  if (typeof v !== 'number') {
+    throw new UnsupportedSchemaError(path, `"${keyword}" must be a number to intersect`);
+  }
+  return v;
+}
+
+/**
+ * Intersect two schemas into one that admits exactly the values BOTH admit.
+ *
+ * Used wherever a combinator sits beside constraining siblings. It is deliberately partial: any
+ * keyword pair it cannot intersect EXACTLY is refused, never approximated. Widening a constraint
+ * to make a merge succeed would emit values the real schema rejects, which is the failure this
+ * whole module exists to avoid.
+ */
+function mergeSchemas(a: JsonSchema, b: unknown, path: string): JsonSchema {
+  if (b === true) return a;
+  if (b === false) throw new UnsatisfiableSchemaError(path);
+  if (!isPlainObject(b)) {
+    throw new UnsupportedSchemaError(path, `cannot intersect with a ${typeof b} branch`);
+  }
+
+  const out: JsonSchema = { ...a };
+  for (const [key, value] of Object.entries(b)) {
+    if (!(key in out)) {
+      out[key] = value;
+      continue;
+    }
+    const prev = out[key];
+    if (deepEqual(prev, value)) continue;
+
+    switch (key) {
+      case 'required': {
+        const left = Array.isArray(prev) ? prev : [];
+        const right = Array.isArray(value) ? value : [];
+        out[key] = [...new Set([...left, ...right])];
+        break;
+      }
+      case 'properties': {
+        // Both sides constrain the same key ⇒ the value must satisfy both, so recurse.
+        const left = isPlainObject(prev) ? prev : {};
+        const right = isPlainObject(value) ? value : {};
+        const merged: JsonSchema = { ...left };
+        for (const [propKey, propSchema] of Object.entries(right)) {
+          merged[propKey] =
+            propKey in merged && !deepEqual(merged[propKey], propSchema)
+              ? mergeSchemas(
+                  isPlainObject(merged[propKey]) ? (merged[propKey] as JsonSchema) : {},
+                  propSchema,
+                  `${path}/properties/${propKey}`,
+                )
+              : propSchema;
+        }
+        out[key] = merged;
+        break;
+      }
+      // The tighter bound wins — that IS the intersection for a numeric range.
+      case 'minLength':
+      case 'minItems':
+      case 'minimum':
+      case 'exclusiveMinimum':
+        out[key] = Math.max(asNumber(prev, path, key), asNumber(value, path, key));
+        break;
+      case 'maxLength':
+      case 'maxItems':
+      case 'maximum':
+      case 'exclusiveMaximum':
+        out[key] = Math.min(asNumber(prev, path, key), asNumber(value, path, key));
+        break;
+      case 'additionalProperties':
+        // Closed beats open: a value with extra keys fails the closed side of the intersection.
+        out[key] = prev === false || value === false ? false : value;
+        break;
+      case 'uniqueItems':
+        out[key] = prev === true || value === true;
+        break;
+      default:
+        if (ANNOTATION_KEYWORDS.has(key)) {
+          out[key] = value;
+          break;
+        }
+        throw new UnsupportedSchemaError(
+          path,
+          `cannot intersect conflicting "${key}" across a combinator branch`,
+        );
+    }
+  }
+  return out;
+}
+
 /**
  * Convert one JSON Schema into an arbitrary producing values that CONFORM to it.
  *
@@ -134,16 +286,19 @@ interface Ctx {
 
 function build(schema: unknown, ctx: Ctx): fc.Arbitrary<unknown> {
   // `true`/`false` are legal JSON Schema shorthand for "anything"/"nothing".
-  if (schema === true) return fc.anything();
+  if (schema === true) return fc.jsonValue();
   if (schema === false) throw new UnsatisfiableSchemaError(ctx.path);
   if (!isPlainObject(schema)) {
     throw new UnsupportedSchemaError(ctx.path, `expected an object schema, got ${typeof schema}`);
   }
 
   for (const key of Object.keys(schema)) {
-    if (!SUPPORTED_KEYWORDS.has(key)) {
-      throw new UnsupportedSchemaError(ctx.path, `unknown keyword "${key}"`);
-    }
+    // `x-` vendor extensions are ignored rather than refused, and that is NOT a silent drop:
+    // the property under test is "every generated value conforms to what the VALIDATOR checks",
+    // and ajv ignores unknown `x-` keywords too. Generator and validator therefore still agree.
+    // (`x-soft-maxLength` is the live instance: an advisory cap beside a real `maxLength`.)
+    if (SUPPORTED_KEYWORDS.has(key) || key.startsWith('x-')) continue;
+    throw new UnsupportedSchemaError(ctx.path, `unknown keyword "${key}"`);
   }
 
   // --- $ref -------------------------------------------------------------------------------
@@ -177,14 +332,30 @@ function build(schema: unknown, ctx: Ctx): fc.Arbitrary<unknown> {
   }
 
   // --- combinators ------------------------------------------------------------------------
-  const union = schema.anyOf ?? schema.oneOf;
-  if (Array.isArray(union)) {
+  // JSON Schema keywords at one level are CONJUNCTIVE: `{type:'object', properties:{…},
+  // anyOf:[…]}` means the value must satisfy the object part AND one branch. Treating the
+  // combinator as if it replaced its siblings generates values that ignore the siblings —
+  // `gitnexus.api_impact` is the live instance (`type:'object'` beside `anyOf` of two `required`
+  // variants), where branch-only generation emitted `[]` for a schema demanding an object.
+  const unionKey = Array.isArray(schema.anyOf)
+    ? 'anyOf'
+    : Array.isArray(schema.oneOf)
+      ? 'oneOf'
+      : undefined;
+  if (unionKey) {
     // `oneOf` means EXACTLY one branch matches. Generating from any single branch satisfies
     // that whenever the branches are disjoint, which is how zod emits discriminated unions.
+    const union = schema[unionKey] as unknown[];
+    const base = { ...schema };
+    delete base[unionKey];
+    const constrains = Object.keys(base).some((k) => !ANNOTATION_KEYWORDS.has(k));
+
     const arbs: fc.Arbitrary<unknown>[] = [];
     for (const [i, branch] of union.entries()) {
+      const path = `${ctx.path}/${unionKey}/${i}`;
       try {
-        arbs.push(build(branch, { ...ctx, path: `${ctx.path}/anyOf/${i}` }));
+        const effective = constrains ? mergeSchemas(base, branch, path) : branch;
+        arbs.push(build(effective, { ...ctx, path }));
       } catch (err) {
         // A never-branch is a normal part of a union; it just contributes nothing.
         if (!(err instanceof UnsatisfiableSchemaError)) throw err;
@@ -195,17 +366,14 @@ function build(schema: unknown, ctx: Ctx): fc.Arbitrary<unknown> {
   }
 
   if (Array.isArray(schema.allOf)) {
-    // Only the object-merge case is sound to synthesise; a general intersection needs a
-    // validator. Merging disjoint object branches is exactly what zod's .and() emits.
-    const merged: JsonSchema = { type: 'object', properties: {}, required: [] };
-    for (const branch of schema.allOf) {
-      if (!isPlainObject(branch) || branch.type !== 'object') {
-        throw new UnsupportedSchemaError(ctx.path, 'allOf is only supported over object schemas');
-      }
-      Object.assign(merged.properties as JsonSchema, (branch.properties as JsonSchema) ?? {});
-      if (Array.isArray(branch.required)) {
-        (merged.required as unknown[]).push(...branch.required);
-      }
+    // An intersection folded into ONE schema. `mergeSchemas` refuses any conflict it cannot
+    // resolve exactly, so an allOf that is not soundly mergeable is reported rather than
+    // approximated — which is the same trade this module makes for unknown keywords.
+    const base = { ...schema };
+    delete base.allOf;
+    let merged: JsonSchema = base;
+    for (const [i, branch] of schema.allOf.entries()) {
+      merged = mergeSchemas(merged, branch, `${ctx.path}/allOf/${i}`);
     }
     return build(merged, ctx);
   }
@@ -219,7 +387,13 @@ function build(schema: unknown, ctx: Ctx): fc.Arbitrary<unknown> {
   if (type === undefined) {
     // No type and no combinator: an unconstrained schema. Legal, and `{}` appears as a
     // property schema for genuinely free-form payloads.
-    return fc.anything({ maxDepth: 2 });
+    //
+    // `fc.jsonValue`, NOT `fc.anything`: `fc.anything()` emits `undefined` (93/4000 sampled),
+    // which is not a JSON value at all. As a REQUIRED property that is a silent wrong answer —
+    // `fc.record` stores the key with an `undefined` value, `JSON.stringify` drops it, and ajv's
+    // `required` check (`data.x === undefined`) fails on a schema the generator claimed to
+    // satisfy. `plans:set-property.value` is the live instance.
+    return fc.jsonValue({ maxDepth: 2 });
   }
   if (typeof type !== 'string') {
     throw new UnsupportedSchemaError(ctx.path, `"type" must be a string or array`);
@@ -244,24 +418,72 @@ function build(schema: unknown, ctx: Ctx): fc.Arbitrary<unknown> {
   }
 }
 
+function compilePattern(pattern: string, path: string): RegExp {
+  try {
+    return new RegExp(pattern);
+  } catch (err) {
+    throw new UnsupportedSchemaError(path, `uncompilable pattern ${pattern}: ${String(err)}`);
+  }
+}
+
+/**
+ * `fc.stringMatching`'s default size tops out around 12 characters, so a `minLength` above that
+ * can NEVER be met by filtering — measured 0/500 for `^[A-Za-z0-9]+$` against `minLength: 15`.
+ * The size is therefore derived from the schema's own bound rather than left at the default.
+ * Measured reach per size (500 samples): small ≈ 12, medium ≈ 111, large ≈ 1100, xlarge ≈ 11000.
+ */
+function sizeForMinLength(minLength: number): 'medium' | 'large' | 'xlarge' | undefined {
+  if (minLength <= 10) return undefined;
+  if (minLength <= 100) return 'medium';
+  if (minLength <= 1000) return 'large';
+  return 'xlarge';
+}
+
 function buildString(schema: JsonSchema, ctx: Ctx): fc.Arbitrary<unknown> {
   const format = typeof schema.format === 'string' ? schema.format : undefined;
-  if (format) {
-    const make = FORMAT_ARBITRARIES[format];
-    if (!make) throw new UnsupportedSchemaError(ctx.path, `unknown string format "${format}"`);
-    return make();
-  }
-  if (typeof schema.pattern === 'string') {
-    // Anchor so the generated value matches the whole string, which is what a validator checks.
-    return fc.stringMatching(new RegExp(schema.pattern));
-  }
+  const pattern = typeof schema.pattern === 'string' ? schema.pattern : undefined;
   const minLength = typeof schema.minLength === 'number' ? schema.minLength : 0;
   const maxLengthRaw = typeof schema.maxLength === 'number' ? schema.maxLength : undefined;
-  const maxLength = Math.max(minLength, Math.min(maxLengthRaw ?? ctx.maxSize, maxLengthRaw ?? 512));
   if (maxLengthRaw !== undefined && maxLengthRaw < minLength) {
     throw new UnsatisfiableSchemaError(ctx.path);
   }
-  return fc.string({ minLength, maxLength });
+
+  // `format`, `pattern` and the length bounds are CONJUNCTIVE — a value must satisfy all three.
+  // Honouring only the first one found is what produced the largest failure class in the corpus:
+  // 13 of 19 non-conforming surfaces paired `format: date-time` with an RFC 3339 `pattern`.
+  let arb: fc.Arbitrary<string>;
+  if (format) {
+    const make = FORMAT_ARBITRARIES[format];
+    if (!make) throw new UnsupportedSchemaError(ctx.path, `unknown string format "${format}"`);
+    arb = make();
+    if (pattern !== undefined) {
+      const re = compilePattern(pattern, ctx.path);
+      arb = arb.filter((v) => re.test(v));
+    }
+  } else if (pattern !== undefined) {
+    const re = compilePattern(pattern, ctx.path);
+    try {
+      // Anchoring is the pattern's own job; `stringMatching` matches the regex as written.
+      arb = fc.stringMatching(re, { size: sizeForMinLength(minLength) });
+    } catch (err) {
+      // fast-check refuses some regex features outright ("Meta character \b not implemented
+      // yet!"). Surface that as an honest refusal instead of letting a raw Error escape and
+      // read as an instrument crash.
+      throw new UnsupportedSchemaError(
+        ctx.path,
+        `pattern ${pattern} is not generatable: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  } else {
+    const maxLength = Math.max(minLength, maxLengthRaw ?? Math.max(ctx.maxSize, minLength));
+    return fc.string({ minLength, maxLength });
+  }
+
+  if (minLength > 0 || maxLengthRaw !== undefined) {
+    const hi = maxLengthRaw ?? Number.POSITIVE_INFINITY;
+    arb = arb.filter((v) => v.length >= minLength && v.length <= hi);
+  }
+  return arb;
 }
 
 function buildNumber(schema: JsonSchema, ctx: Ctx, integer: boolean): fc.Arbitrary<unknown> {
@@ -369,7 +591,7 @@ function buildObject(schema: JsonSchema, ctx: Ctx): fc.Arbitrary<unknown> {
   try {
     valueArb =
       additional === true
-        ? fc.anything({ maxDepth: 1 })
+        ? fc.jsonValue({ maxDepth: 1 })
         : build(additional, { ...ctx, path: `${ctx.path}/additionalProperties` });
   } catch (err) {
     if (err instanceof UnsatisfiableSchemaError) return declared;
