@@ -37,3 +37,10 @@ export type {
   RunCensusOptions,
 } from './run.js';
 export { DEFAULT_MASS_RETIREMENT_THRESHOLD, runCensus } from './run.js';
+
+export type { JsonSchema, SchemaArbitraryOptions } from './schema-arbitrary.js';
+export {
+  jsonSchemaToArbitrary,
+  UnsatisfiableSchemaError,
+  UnsupportedSchemaError,
+} from './schema-arbitrary.js';
