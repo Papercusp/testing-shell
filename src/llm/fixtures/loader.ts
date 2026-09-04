@@ -21,7 +21,9 @@ import type { SseEvent, TurnResult, CardEvent, ControlTag, ToolCallEvent } from 
 export function loadFixtureTurn(filePath: string): TurnResult {
   const text = readFileSync(filePath, 'utf8');
   const events = parseSseTape(text);
-  return assembleTurn(events);
+  const turn = assembleTurn(events);
+  const normalized = readNormalizedTranscript(filePath);
+  return normalized?.length === 1 ? mergeNormalizedTurn(turn, normalized[0]) : turn;
 }
 
 export interface FixtureTelemetry {
@@ -55,6 +57,22 @@ export function loadFixtureTelemetry(sseFilePath: string): FixtureTelemetry | nu
 
 export function loadFixtureTurns(filePaths: string[]): TurnResult[] {
   return filePaths.map((p) => loadFixtureTurn(p));
+}
+
+/**
+ * Load an exported normalized transcript sidecar when one exists. The sidecar
+ * preserves sim-user evidence and turn boundaries that a flattened SSE tape
+ * cannot carry. Missing/invalid sidecars are a normal back-compat case.
+ */
+export function loadFixtureTranscript(filePath: string): TurnResult[] | null {
+  const normalized = readNormalizedTranscript(filePath);
+  if (!normalized || normalized.length === 0) return null;
+
+  if (normalized.length === 1) {
+    const turn = assembleTurn(parseSseTape(readFileSync(filePath, 'utf8')));
+    return [mergeNormalizedTurn(turn, normalized[0])];
+  }
+  return normalized.map((value) => normalizedToTurn(value)).filter((t): t is TurnResult => t !== null);
 }
 
 /**
@@ -154,6 +172,69 @@ function assembleTurn(events: SseEvent[]): TurnResult {
   }
   result.controlTags = extractControlTags(result.assistantText);
   return result;
+}
+
+type NormalizedFixtureTurn = {
+  assistantText?: unknown;
+  toolCalls?: unknown;
+  cards?: unknown;
+  controlTags?: unknown;
+  finishReason?: unknown;
+  costUsd?: unknown;
+  latencyMs?: unknown;
+  error?: unknown;
+  userText?: unknown;
+  simThought?: unknown;
+  simKind?: unknown;
+};
+
+function normalizedTranscriptPath(filePath: string): string {
+  return filePath.replace(/\.sse$/, '.transcript.json');
+}
+
+function readNormalizedTranscript(filePath: string): NormalizedFixtureTurn[] | null {
+  const transcriptPath = normalizedTranscriptPath(filePath);
+  if (!existsSync(transcriptPath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(transcriptPath, 'utf8')) as
+      | NormalizedFixtureTurn[]
+      | { turns?: unknown[] };
+    const values = Array.isArray(parsed)
+      ? parsed
+      : parsed && Array.isArray(parsed.turns) ? parsed.turns : null;
+    if (!values) return null;
+    return values.filter((value): value is NormalizedFixtureTurn => !!value && typeof value === 'object');
+  } catch {
+    return null;
+  }
+}
+
+function normalizedToTurn(value: NormalizedFixtureTurn): TurnResult | null {
+  if (typeof value.assistantText !== 'string') return null;
+  const turn: TurnResult = {
+    assistantText: value.assistantText,
+    toolCalls: Array.isArray(value.toolCalls) ? value.toolCalls as TurnResult['toolCalls'] : [],
+    cards: Array.isArray(value.cards) ? value.cards as TurnResult['cards'] : [],
+    controlTags: Array.isArray(value.controlTags) ? value.controlTags as TurnResult['controlTags'] : [],
+    costUsd: typeof value.costUsd === 'number' ? value.costUsd : 0,
+    latencyMs: typeof value.latencyMs === 'number' ? value.latencyMs : 0,
+    finishReason: value.finishReason === 'error' || value.finishReason === 'aborted' ||
+      value.finishReason === 'budget' || value.finishReason === 'cap'
+      ? value.finishReason
+      : 'done',
+    rawSseTape: [],
+  };
+  if (typeof value.error === 'string') turn.error = value.error;
+  if (typeof value.userText === 'string') turn.userText = value.userText;
+  if (typeof value.simThought === 'string') turn.simThought = value.simThought;
+  if (value.simKind === 'text' || value.simKind === 'choice') turn.simKind = value.simKind;
+  return turn;
+}
+
+function mergeNormalizedTurn(base: TurnResult, value: NormalizedFixtureTurn): TurnResult {
+  const normalized = normalizedToTurn(value);
+  if (!normalized) return base;
+  return { ...base, ...normalized, rawSseTape: base.rawSseTape };
 }
 
 function extractDeltaText(data: unknown): string {
