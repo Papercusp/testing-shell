@@ -490,6 +490,9 @@ interface RunDetail {
     transcript_norm_json: Array<{
       idx: number;
       assistantText: string;
+      userText?: string;
+      simThought?: string;
+      simKind?: string;
       toolCalls: Array<{ name: string; input?: unknown }>;
       cards: Array<{ kind: string; voiceAnswerable?: boolean }>;
       controlTags: Array<{ tag: string; attrs?: Record<string, string> }>;
@@ -627,6 +630,24 @@ function RunDetailBody({
                   </div>
                   {isOpen ? (
                     <div style={{ marginTop: 8, fontSize: 13 }}>
+                      {t.userText !== undefined ? (
+                        <>
+                          <div style={{ fontSize: 12, color: 'var(--fg-mute, #888)', marginBottom: 4 }}>
+                            <strong>sim user{t.simKind ? ` (${t.simKind})` : ''}</strong>
+                          </div>
+                          <pre style={{ whiteSpace: 'pre-wrap', margin: '0 0 8px 0', background: 'var(--bg-soft, #f8f8f8)', padding: 8 }}>
+                            {t.userText || <em>(empty)</em>}
+                          </pre>
+                          {t.simThought ? (
+                            <details style={{ marginBottom: 8 }}>
+                              <summary style={{ cursor: 'pointer', fontSize: 12 }}>sim-user thought</summary>
+                              <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, background: 'var(--bg-soft, #f8f8f8)', padding: 8 }}>
+                                {t.simThought}
+                              </pre>
+                            </details>
+                          ) : null}
+                        </>
+                      ) : null}
                       <pre style={{ whiteSpace: 'pre-wrap', margin: '0 0 8px 0', background: 'var(--bg-soft, #f8f8f8)', padding: 8 }}>
                         {t.assistantText || <em>(empty)</em>}
                       </pre>

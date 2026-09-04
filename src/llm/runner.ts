@@ -29,7 +29,13 @@ import { judgeRun, buildInconclusiveJudge, JUDGE_PROMPT_SCAFFOLD_VERSION } from 
 import { resolveJudgeModel } from './judges/registry';
 import { lookupBlend } from './personas/blends';
 import { resolvePersona } from './personas/traits';
-import { SimUser, resolveSimUserContext, type SimAction } from './sim-user';
+import {
+  SimUser,
+  resolveSimUserContext,
+  simActionToTurnContext,
+  type SimAction,
+  type SimHistoryEntry,
+} from './sim-user';
 import type {
   CardEvent,
   ChatSession,
@@ -87,6 +93,8 @@ export interface RunReport {
 
 export interface SingleRunReport {
   summary: RunSummary;
+  /** Full sim/SUT history retained for the persistence adapter's audit projection. */
+  simHistory?: SimHistoryEntry[];
   violations: Violation[];
   judge: import('./types').JudgeResult;
   status: 'passed' | 'failed' | 'errored';
@@ -406,10 +414,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
 
   const startedAt = new Date();
   const turns: TurnResult[] = [];
-  const simHistory: Array<
-    | { who: 'sim'; action: SimAction }
-    | { who: 'sut'; turn: TurnResult }
-  > = [];
+  const simHistory: SimHistoryEntry[] = [];
   // `let` (not `const`): the compaction seam (P-006) rebinds this to a
   // rewritten history before the policy's designated turn.
   let wireMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
@@ -482,6 +487,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
 
       let trigger: TurnTrigger;
       let turnMeta: Record<string, unknown> = { modality: persona.traits.modality };
+      let simActionForTurn: SimAction | undefined;
 
       const scripted = scriptedTriggers.get(turnIdx);
       if (scripted) {
@@ -492,10 +498,12 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
           // instead of inventing a rationale the sim-user never produced — this text
           // shows up in transcripts and judge input, where a fabricated thought would
           // read as real model reasoning.
-          simHistory.push({
-            who: 'sim',
-            action: { kind: 'text', thought: '(scripted trigger — declared by the scenario)', text: scripted.text },
-          });
+          simActionForTurn = {
+            kind: 'text',
+            thought: '(scripted trigger — declared by the scenario)',
+            text: scripted.text,
+          };
+          simHistory.push({ who: 'sim', action: simActionForTurn });
         }
         trigger = scripted.fire;
         scriptedTriggers.delete(turnIdx);
@@ -536,6 +544,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
           break;
         }
 
+        simActionForTurn = action;
         if (action.kind === 'text') {
           wireMessages.push({ role: 'user', content: action.text });
           trigger = 'user_message';
@@ -573,6 +582,15 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
           break;
         }
         throw err;
+      }
+      const simContext = simActionForTurn
+        ? simActionToTurnContext(simActionForTurn)
+        : undefined;
+      if (simContext) {
+        // Keep the context on the in-memory turn as well as in simHistory:
+        // the live judge and any in-memory store should see the same evidence
+        // that the persistence adapter projects into transcript_norm_json.
+        result = { ...result, ...simContext };
       }
       turns.push(result);
       simHistory.push({ who: 'sut', turn: result });
@@ -704,7 +722,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     }
   }
 
-  return { summary, violations, judge, status };
+  return { summary, simHistory, violations, judge, status };
 }
 
 /**

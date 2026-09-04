@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadFixtureTurn } from '../fixtures/loader';
+import { loadFixtureTranscript, loadFixtureTurn } from '../fixtures/loader';
 
 let dir: string;
 
@@ -105,5 +105,45 @@ describe('loadFixtureTurn', () => {
     const turn = loadFixtureTurn(join(fixturesDir, '01-terminal-status-question.sse'));
     expect(turn.assistantText.length).toBeGreaterThan(0);
     expect(turn.finishReason).toBe('done');
+  });
+
+  it('loads sim-user evidence from an exported normalized transcript sidecar', () => {
+    const p = write('with-context.sse', [
+      'event: delta',
+      'data: {"text":"Approved."}',
+      '',
+      'event: done',
+      'data: {}',
+      '',
+    ].join('\n'));
+    write('with-context.transcript.json', JSON.stringify({
+      schemaVersion: 1,
+      turns: [{
+        idx: 0,
+        assistantText: 'Approved.',
+        toolCalls: [],
+        cards: [],
+        controlTags: [],
+        finishReason: 'done',
+        costUsd: 0,
+        latencyMs: 1,
+        error: null,
+        userText: 'Please approve this write.',
+        simThought: 'approval needed',
+        simKind: 'text',
+      }],
+    }));
+
+    const turns = loadFixtureTranscript(p);
+    expect(turns).toHaveLength(1);
+    expect(turns?.[0]).toMatchObject({
+      assistantText: 'Approved.',
+      userText: 'Please approve this write.',
+      simThought: 'approval needed',
+      simKind: 'text',
+    });
+    // The one-turn convenience loader also merges the sidecar while
+    // preserving the raw SSE tape for callers that need it.
+    expect(loadFixtureTurn(p).rawSseTape).toHaveLength(2);
   });
 });

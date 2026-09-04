@@ -129,6 +129,12 @@ export type TurnTrigger =
 export interface TurnResult {
   /** Accumulated `delta` text. */
   assistantText: string;
+  /** User text that preceded this SUT turn, when a sim-user action produced it. */
+  userText?: string;
+  /** Sim-user's recorded rationale for the user action, when available. */
+  simThought?: string;
+  /** Sim-user action kind that produced this turn. */
+  simKind?: 'text' | 'choice';
   /** Tool calls the SUT emitted during this turn. */
   toolCalls: ToolCallEvent[];
   /** Cards (ctx.askUser / ctx.publishState envelopes). */

@@ -182,6 +182,43 @@ describe('runScenario — store persistence seam (P-071)', () => {
     expect(sends.inputs[1].messages).toContainEqual({ role: 'user', content: 'second scripted turn' });
   });
 
+  it('records sim-user evidence on the SUT turn and exposes it to the judge', async () => {
+    let simCalls = 0;
+    const judgePrompts: string[] = [];
+    const llmCall: LlmCallFn = async (opts) => {
+      const isJudge = (opts.system ?? '').includes('external reviewer');
+      if (isJudge) judgePrompts.push(opts.messages[0]?.content ?? '');
+      const json = isJudge
+        ? { summary: 'nominal', scores: { quality: 5 }, findings: [], agrees_with_deterministic_asserts: true, novel_failures: [] }
+        : simCalls++ === 0
+          ? { thought: 'approval needed', action: { kind: 'text', text: 'Please approve this write.' } }
+          : { thought: 'done', action: { kind: 'declare_success', reason: 'done' } };
+      return {
+        text: JSON.stringify(json),
+        json,
+        inputTokens: 1,
+        outputTokens: 1,
+        costUsd: 0,
+        raw: null,
+      };
+    };
+    const { deps } = makeDeps({ llmCall });
+
+    const report = await runScenario(makeScenario(), {}, deps);
+    const run = report.runs[0];
+    expect(run?.summary.turns[0]).toMatchObject({
+      userText: 'Please approve this write.',
+      simThought: 'approval needed',
+      simKind: 'text',
+    });
+    expect(run?.simHistory).toEqual([
+      { who: 'sim', action: { kind: 'text', thought: 'approval needed', text: 'Please approve this write.' } },
+      expect.objectContaining({ who: 'sut' }),
+      { who: 'sim', action: { kind: 'declare_success', thought: 'done', reason: 'done' } },
+    ]);
+    expect(judgePrompts[0]).toContain('Please approve this write.');
+  });
+
 
   it('calls store.persistRunReport once with the aggregate report when a store is injected', async () => {
     const scenario = makeScenario();

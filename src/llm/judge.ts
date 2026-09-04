@@ -330,6 +330,9 @@ function formatTranscript(turns: readonly TurnResult[]): string {
   for (let i = 0; i < turns.length; i++) {
     const t = turns[i];
     lines.push(`### Turn ${i}`);
+    if (t.userText !== undefined) {
+      lines.push(`**User text${t.simKind ? ` (${t.simKind})` : ''}:** ${t.userText || '(empty)'}`);
+    }
     lines.push(`**Assistant text:** ${t.assistantText.trim() || '(empty)'}`);
     if (t.toolCalls.length > 0) {
       lines.push(`**Tool calls:** ${t.toolCalls.map((tc) => `${tc.name}(${truncJson(tc.input)})`).join(', ')}`);

@@ -44,6 +44,38 @@ export type SimAction =
   | { kind: 'give_up'; thought: string; reason: string }
   | { kind: 'declare_success'; thought: string; reason: string };
 
+export type SimHistoryEntry =
+  | { who: 'sim'; action: SimAction }
+  | { who: 'sut'; turn: TurnResult };
+
+/** The user-side evidence that belongs beside one SUT turn. */
+export interface SimTurnContext {
+  userText: string;
+  simThought: string;
+  simKind: 'text' | 'choice';
+}
+
+/**
+ * Convert an action that actually produces a SUT turn into the exact
+ * user-facing text sent on the wire. Terminal sim actions do not have a
+ * corresponding SUT turn, so they intentionally return no context.
+ */
+export function simActionToTurnContext(action: SimAction): SimTurnContext | undefined {
+  switch (action.kind) {
+    case 'text':
+      return { userText: action.text, simThought: action.thought, simKind: action.kind };
+    case 'choice':
+      return {
+        userText: `[card ${action.cardId} → ${action.optionId}]${action.freeText ? `: ${action.freeText}` : ''}`,
+        simThought: action.thought,
+        simKind: action.kind,
+      };
+    case 'give_up':
+    case 'declare_success':
+      return undefined;
+  }
+}
+
 export interface SimUserOpts {
   persona: Persona;
   goal: GoalSpec;
@@ -61,10 +93,7 @@ export interface SimUserOpts {
 
 export interface SimNextInput {
   /** Past turns (sim-user actions + SUT replies), oldest first. */
-  history: Array<
-    | { who: 'sim'; action: SimAction }
-    | { who: 'sut'; turn: TurnResult }
-  >;
+  history: SimHistoryEntry[];
   /** Current visible cards (subset of the last SUT turn's cards that haven't been answered). */
   cards: CardEvent[];
   /** Turn budget — sim is told how many turns remain so it tightens up near the cap. */

@@ -42,7 +42,15 @@ export {
 } from './judge';
 
 // Sim-user.
-export { SimUser, type SimUserOpts, type SimNextInput, type SimAction } from './sim-user';
+export {
+  SimUser,
+  simActionToTurnContext,
+  type SimUserOpts,
+  type SimNextInput,
+  type SimAction,
+  type SimHistoryEntry,
+  type SimTurnContext,
+} from './sim-user';
 
 // Deterministic asserts (registers all evaluators on import).
 export { evaluateAsserts, registerEvaluator, type AssertEvaluator } from './asserts/index';
@@ -142,6 +150,7 @@ export {
 export {
   loadFixtureTurn,
   loadFixtureTurns,
+  loadFixtureTranscript,
   loadFixtureTelemetry,
   resolveFixturePath,
   type FixtureTelemetry,
