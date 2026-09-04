@@ -69,7 +69,8 @@
     "hono": ">=4",
     "playwright": "*",
     "@browserbasehq/stagehand": "*",
-    "gremlins.js": ">=2"
+    "gremlins.js": ">=2",
+    "fast-check": ">=4"
   },
   "peerDependenciesMeta": {
     "hono": {
