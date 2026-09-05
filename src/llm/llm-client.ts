@@ -53,6 +53,15 @@ export interface LlmCallOpts {
    */
   priority?: string;
   /**
+   * WI-2144763: the harness this call's spend belongs to. The operator host forwards it
+   * as usage attribution so the resulting `source:'headers'` usage row carries
+   * `harness_slug` instead of falling into the '(unattributed)' bucket. Pass it whenever
+   * the caller genuinely knows the harness (a scout/gym cycle does — it takes
+   * `harnessSlug` as a first-class parameter); omit it for workspace-global work, since
+   * an honest NULL beats a guessed slug. Ignored by hosts that record no usage.
+   */
+  harnessSlug?: string;
+  /**
    * Cap (ms) on the ADMISSION wait — how long the host's shared rate-limit governor may
    * block this call waiting for a permit, BEFORE the request is issued. Omit to inherit
    * the host default.
