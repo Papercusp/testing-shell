@@ -122,6 +122,13 @@ describe('loadFixtureTurn', () => {
         idx: 0,
         assistantText: 'Approved.',
         toolCalls: [],
+        toolResults: [{
+          name: 'work_items:get',
+          output: '{"ok":true,"id":"WI-200"}',
+          isError: false,
+          truncated: false,
+          sourceChars: 25,
+        }],
         cards: [],
         controlTags: [],
         finishReason: 'done',
@@ -138,6 +145,10 @@ describe('loadFixtureTurn', () => {
     expect(turns).toHaveLength(1);
     expect(turns?.[0]).toMatchObject({
       assistantText: 'Approved.',
+      toolResults: [expect.objectContaining({
+        name: 'work_items:get',
+        output: expect.stringContaining('WI-200'),
+      })],
       userText: 'Please approve this write.',
       simThought: 'approval needed',
       simKind: 'text',
