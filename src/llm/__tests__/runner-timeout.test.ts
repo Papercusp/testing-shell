@@ -172,6 +172,11 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
             summary: {
               finishReason: 'cap_breach',
               capBreaches: ['wallclock'],
+              timeout: {
+                cause: 'wallclock_deadline',
+                stage: 'sut_session_send',
+                turnIndex: 0,
+              },
             },
           },
         ],
@@ -197,6 +202,11 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
             summary: {
               finishReason: 'cap_breach',
               capBreaches: ['wallclock'],
+              timeout: {
+                cause: 'wallclock_deadline',
+                stage: 'sim_user_next_action',
+                turnIndex: 0,
+              },
             },
           },
         ],
@@ -213,5 +223,6 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
     const report = await runScenario(scenario, {}, makeDeps(makeNormalTarget()));
     expect(report.runs[0].summary.finishReason).toBe('completed');
     expect(report.runs[0].summary.capBreaches).toEqual([]);
+    expect(report.runs[0].summary.timeout).toBeUndefined();
   });
 });

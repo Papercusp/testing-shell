@@ -419,6 +419,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   // rewritten history before the policy's designated turn.
   let wireMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
   const capBreaches: string[] = [];
+  let timeout: RunSummary['timeout'];
   let compactionApplied = false;
 
   const maxTurns = scenario.caps.maxTurns;
@@ -456,6 +457,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     for (let turnIdx = 0; turnIdx < maxTurns; turnIdx++) {
       if (Date.now() > wallDeadlineMs) {
         capBreaches.push('wallclock');
+        timeout = {
+          cause: 'wallclock_deadline',
+          stage: 'turn_loop',
+          turnIndex: turnIdx,
+        };
         finishReason = 'cap_breach';
         break;
       }
@@ -528,6 +534,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
         } catch (err) {
           if (err instanceof LlmTestTimeoutError) {
             capBreaches.push('wallclock');
+            timeout = {
+              cause: 'wallclock_deadline',
+              stage: 'sim_user_next_action',
+              turnIndex: turnIdx,
+            };
             finishReason = 'cap_breach';
             break;
           }
@@ -578,6 +589,11 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       } catch (err) {
         if (err instanceof LlmTestTimeoutError) {
           capBreaches.push('wallclock');
+          timeout = {
+            cause: 'wallclock_deadline',
+            stage: 'sut_session_send',
+            turnIndex: turnIdx,
+          };
           finishReason = 'cap_breach';
           break;
         }
@@ -662,6 +678,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     finishedAt,
     finishReason,
     capBreaches,
+    ...(timeout && { timeout }),
   };
 
   // Deterministic asserts.

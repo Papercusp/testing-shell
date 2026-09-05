@@ -531,6 +531,16 @@ export interface RunSummary {
   finishedAt: Date;
   finishReason: 'completed' | 'cap_breach' | 'errored' | 'aborted';
   capBreaches: string[];
+  /**
+   * Bounded causal detail for a wall-clock timeout. `capBreaches` remains the
+   * stable aggregate signal; this field identifies which runner boundary
+   * exhausted the deadline so a zero-turn row is diagnosable after persistence.
+   */
+  timeout?: {
+    cause: 'wallclock_deadline';
+    stage: 'turn_loop' | 'sim_user_next_action' | 'sut_session_send';
+    turnIndex: number;
+  };
 }
 
 export interface ToolInvocationRow {
