@@ -137,6 +137,12 @@ export interface TurnResult {
   simKind?: 'text' | 'choice';
   /** Tool calls the SUT emitted during this turn. */
   toolCalls: ToolCallEvent[];
+  /**
+   * Bounded, redacted tool outputs observed during this turn, in call order.
+   * This is evidence for the judge and persisted replay path, never the raw
+   * provider payload. Producers must populate an empty array when no tool ran.
+   */
+  toolResults: ToolResultEvent[];
   /** Cards (ctx.askUser / ctx.publishState envelopes). */
   cards: CardEvent[];
   /** Control tags (<continue/>, <sleep/>, <spawn/>, etc.). */

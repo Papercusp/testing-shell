@@ -94,6 +94,7 @@ function makeTarget(opts: { supportsVariants?: boolean; seenOpens: SessionOption
           return {
             assistantText: 'ok',
             toolCalls: [],
+            toolResults: [],
             cards: [],
             controlTags: [],
             costUsd: 0,

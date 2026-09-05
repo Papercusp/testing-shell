@@ -121,6 +121,7 @@ function makeTarget(): ChatTarget {
           return {
             assistantText: 'ok',
             toolCalls: [],
+            toolResults: [],
             cards: [],
             controlTags: [],
             costUsd: 0,

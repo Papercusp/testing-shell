@@ -134,6 +134,7 @@ function makeCapturingTarget(captured: WireMsg[][]): ChatTarget {
           return {
             assistantText: `ASSISTANT_TURN_${t}`,
             toolCalls: [],
+            toolResults: [],
             cards: [],
             controlTags: [],
             costUsd: 0,

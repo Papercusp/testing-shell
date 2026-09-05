@@ -16,7 +16,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { SseEvent, TurnResult, CardEvent, ControlTag, ToolCallEvent } from '../types';
+import {
+  TOOL_RESULT_EVIDENCE_MAX_CHARS,
+  TOOL_RESULT_EVIDENCE_MAX_EVENTS,
+  type SseEvent,
+  type TurnResult,
+  type CardEvent,
+  type ControlTag,
+  type ToolCallEvent,
+  type ToolResultEvent,
+} from '../types';
 
 export function loadFixtureTurn(filePath: string): TurnResult {
   const text = readFileSync(filePath, 'utf8');
@@ -128,6 +137,7 @@ function assembleTurn(events: SseEvent[]): TurnResult {
   const result: TurnResult = {
     assistantText: '',
     toolCalls: [],
+    toolResults: [],
     cards: [],
     controlTags: [],
     costUsd: 0,
@@ -177,6 +187,7 @@ function assembleTurn(events: SseEvent[]): TurnResult {
 type NormalizedFixtureTurn = {
   assistantText?: unknown;
   toolCalls?: unknown;
+  toolResults?: unknown;
   cards?: unknown;
   controlTags?: unknown;
   finishReason?: unknown;
@@ -214,6 +225,7 @@ function normalizedToTurn(value: NormalizedFixtureTurn): TurnResult | null {
   const turn: TurnResult = {
     assistantText: value.assistantText,
     toolCalls: Array.isArray(value.toolCalls) ? value.toolCalls as TurnResult['toolCalls'] : [],
+    toolResults: normalizeToolResults(value.toolResults),
     cards: Array.isArray(value.cards) ? value.cards as TurnResult['cards'] : [],
     controlTags: Array.isArray(value.controlTags) ? value.controlTags as TurnResult['controlTags'] : [],
     costUsd: typeof value.costUsd === 'number' ? value.costUsd : 0,
@@ -229,6 +241,33 @@ function normalizedToTurn(value: NormalizedFixtureTurn): TurnResult | null {
   if (typeof value.simThought === 'string') turn.simThought = value.simThought;
   if (value.simKind === 'text' || value.simKind === 'choice') turn.simKind = value.simKind;
   return turn;
+}
+
+function normalizeToolResults(value: unknown): ToolResultEvent[] {
+  if (!Array.isArray(value)) return [];
+  const results: ToolResultEvent[] = [];
+  for (const raw of value.slice(0, TOOL_RESULT_EVIDENCE_MAX_EVENTS)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const candidate = raw as Record<string, unknown>;
+    if (typeof candidate.name !== 'string' || typeof candidate.output !== 'string') continue;
+    const output = candidate.output.slice(0, TOOL_RESULT_EVIDENCE_MAX_CHARS);
+    const sourceChars =
+      typeof candidate.sourceChars === 'number' &&
+      Number.isFinite(candidate.sourceChars) &&
+      candidate.sourceChars >= 0
+        ? Math.trunc(candidate.sourceChars)
+        : candidate.output.length;
+    results.push({
+      name: candidate.name.slice(0, 200),
+      output,
+      isError: candidate.isError === true,
+      truncated:
+        candidate.truncated === true ||
+        candidate.output.length > TOOL_RESULT_EVIDENCE_MAX_CHARS,
+      sourceChars,
+    });
+  }
+  return results;
 }
 
 function mergeNormalizedTurn(base: TurnResult, value: NormalizedFixtureTurn): TurnResult {

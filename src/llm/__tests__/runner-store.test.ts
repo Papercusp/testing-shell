@@ -70,6 +70,7 @@ function makeFakeTarget(sends: { value: number; inputs: TurnInput[] }): ChatTarg
           const turn: TurnResult = {
             assistantText: 'Here you go.',
             toolCalls: [],
+            toolResults: [],
             cards: [],
             controlTags: [],
             costUsd: 0,

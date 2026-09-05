@@ -88,6 +88,7 @@ function makeTarget(events: string[], opts: { openThrows?: boolean } = {}): Chat
           return {
             assistantText: 'ok',
             toolCalls: [],
+            toolResults: [],
             cards: [],
             controlTags: [],
             costUsd: 0,

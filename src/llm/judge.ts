@@ -17,14 +17,16 @@ import { createHash } from 'node:crypto';
 
 import { computeFindingShape } from './identity';
 import type { LlmCallFn } from './deps';
-import type {
-  CardEvent,
-  JudgeFinding,
-  JudgeResult,
-  JudgeRubric,
-  RunSummary,
-  TurnResult,
-  Violation,
+import {
+  TOOL_RESULT_EVIDENCE_MAX_CHARS,
+  type CardEvent,
+  type JudgeFinding,
+  type JudgeResult,
+  type JudgeRubric,
+  type RunSummary,
+  type ToolResultEvent,
+  type TurnResult,
+  type Violation,
 } from './types';
 
 export interface JudgeOpts {
@@ -337,6 +339,10 @@ function formatTranscript(turns: readonly TurnResult[]): string {
     if (t.toolCalls.length > 0) {
       lines.push(`**Tool calls:** ${t.toolCalls.map((tc) => `${tc.name}(${truncJson(tc.input)})`).join(', ')}`);
     }
+    if (t.toolResults.length > 0) {
+      lines.push('**Tool results:**');
+      lines.push(...t.toolResults.map(formatToolResult));
+    }
     if (t.cards.length > 0) {
       lines.push(`**Cards:** ${t.cards.map(formatCard).join(', ')}`);
     }
@@ -352,6 +358,20 @@ function formatTranscript(turns: readonly TurnResult[]): string {
 function formatCard(c: CardEvent): string {
   const opts = c.options ? `[${c.options.map((o) => o.id).join('|')}]` : '';
   return `${c.kind}${opts}${c.voiceAnswerable ? '(voice)' : ''}`;
+}
+
+function formatToolResult(result: ToolResultEvent): string {
+  const judgeTruncated = result.output.length > TOOL_RESULT_EVIDENCE_MAX_CHARS;
+  const output = judgeTruncated
+    ? result.output.slice(0, TOOL_RESULT_EVIDENCE_MAX_CHARS)
+    : result.output;
+  const sourceChars = Number.isFinite(result.sourceChars)
+    ? Math.max(0, Math.trunc(result.sourceChars))
+    : result.output.length;
+  const truncation = result.truncated || judgeTruncated
+    ? `; truncated from ${sourceChars} source chars`
+    : '';
+  return `- ${result.name} [${result.isError ? 'error' : 'ok'}${truncation}]: ${JSON.stringify(output)}`;
 }
 
 /**
@@ -447,6 +467,7 @@ const SCAFFOLD_PROBE_TURNS: readonly TurnResult[] = [
   {
     assistantText: '',
     toolCalls: [],
+    toolResults: [],
     cards: [],
     controlTags: [],
     costUsd: 0,
@@ -457,6 +478,13 @@ const SCAFFOLD_PROBE_TURNS: readonly TurnResult[] = [
   {
     assistantText: SCAFFOLD_PROBE,
     toolCalls: [{ name: SCAFFOLD_PROBE, input: { probe: SCAFFOLD_PROBE } }],
+    toolResults: [{
+      name: SCAFFOLD_PROBE,
+      output: SCAFFOLD_PROBE,
+      isError: false,
+      truncated: false,
+      sourceChars: SCAFFOLD_PROBE.length,
+    }],
     cards: [
       {
         kind: SCAFFOLD_PROBE,
