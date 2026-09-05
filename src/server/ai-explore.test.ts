@@ -92,11 +92,24 @@ async function drain(stream: ReadableStream<Uint8Array>): Promise<string> {
   return out;
 }
 
+/**
+ * Install a fake child as spawn()'s return, and hand it back.
+ *
+ * The `as never` lives HERE, once, rather than at each call site: node:child_process' spawn
+ * is heavily overloaded, so a partial ChildProcess stub cannot satisfy it structurally. Keeping
+ * a single escape means the lint:mock-cast-escape ratchet counts one occurrence for this file
+ * instead of one per test — the reason this helper exists at all.
+ */
+function installFakeChild(): ReturnType<typeof fakeChild> {
+  const child = fakeChild();
+  vi.mocked(spawn).mockReturnValue(child as never);
+  return child;
+}
+
 describe('spawnAiExplore', () => {
   it('writes cfg+apiKey to stdin and returns the child', () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    const child = fakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
+    const child = installFakeChild();
     const cfg = { goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 5, maxCostUsd: 1, headless: true };
     const out = spawnAiExplore(cfg, { repoRoot: '/repo', apiKey: 'sk-123' });
     expect(out).toBe(child);
@@ -114,8 +127,7 @@ describe('spawnAiExplore', () => {
   // is what lets this route use the default account instead of a raw Anthropic key.
   it('threads baseUrl to the runner when one is supplied', () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    const child = fakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
+    const child = installFakeChild();
     const cfg = { goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 5, maxCostUsd: 1, headless: true };
     spawnAiExplore(cfg, { repoRoot: '/repo', apiKey: 'placeholder', baseUrl: 'http://127.0.0.1:8788' });
     const written = child.stdin.write.mock.calls[0][0] as string;
@@ -127,8 +139,7 @@ describe('spawnAiExplore', () => {
   // would pass on a stray `baseUrl: undefined`, so assert on the KEY's absence.
   it('omits baseUrl entirely when none is supplied', () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    const child = fakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
+    const child = installFakeChild();
     const cfg = { goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 5, maxCostUsd: 1, headless: true };
     spawnAiExplore(cfg, { repoRoot: '/repo', apiKey: 'sk-123' });
     const written = child.stdin.write.mock.calls[0][0] as string;
@@ -140,8 +151,7 @@ describe('spawnAiExplore', () => {
 describe('spawnAiExploreSSE', () => {
   it('relays runner NDJSON as SSE event frames + a done frame on exit', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    const child = fakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
+    const child = installFakeChild();
     const stream = spawnAiExploreSSE({ goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 1, maxCostUsd: 1, headless: true }, { repoRoot: '/repo', apiKey: 'k' });
     child.stdout.emit('data', Buffer.from('{"type":"start","goal":"g"}\n{"type":"step","n":1,"ok":true}\n'));
     child.stderr.emit('data', Buffer.from('some stderr noise\n'));
