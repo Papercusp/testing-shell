@@ -60,7 +60,10 @@ function makeScenario(over: Partial<Scenario> = {}): Scenario {
   };
 }
 
-function makeTarget(opts: { toolNames?: readonly string[] }): ChatTarget {
+function makeTarget(opts: {
+  toolNames?: readonly string[];
+  turn?: Partial<TurnResult>;
+}): ChatTarget {
   return {
     id: 'fake',
     behaviors: [],
@@ -79,6 +82,7 @@ function makeTarget(opts: { toolNames?: readonly string[] }): ChatTarget {
             latencyMs: 1,
             finishReason: 'done',
             rawSseTape: [],
+            ...opts.turn,
           };
         },
         async close() {},
@@ -92,11 +96,17 @@ function makeTarget(opts: { toolNames?: readonly string[] }): ChatTarget {
  *  The sim-user's FIRST call must be a real `text` action (a `declare_success`
  *  opener ends the conversation with zero turns before the SUT ever replies,
  *  which the runner then treats as inconclusive — never reaching the judge). */
-function makeCapturingLlmCall(seenSystemPrompts: string[]): LlmCallFn {
+function makeCapturingLlmCall(
+  seenSystemPrompts: string[],
+  seenUserPrompts: string[] = [],
+): LlmCallFn {
   let simCalls = 0;
   return async (opts: LlmCallOpts) => {
     const isJudge = (opts.system ?? '').includes('external reviewer');
-    if (isJudge) seenSystemPrompts.push(opts.system ?? '');
+    if (isJudge) {
+      seenSystemPrompts.push(opts.system ?? '');
+      seenUserPrompts.push(opts.messages.map((message) => message.content).join('\n'));
+    }
     let json: unknown;
     if (isJudge) {
       json = { summary: 'nominal', scores: { quality: 5 }, findings: [], agrees_with_deterministic_asserts: true, novel_failures: [] };
@@ -118,9 +128,13 @@ function makeCapturingLlmCall(seenSystemPrompts: string[]): LlmCallFn {
   };
 }
 
-function makeDeps(target: ChatTarget, seenSystemPrompts: string[]): RunnerDeps {
+function makeDeps(
+  target: ChatTarget,
+  seenSystemPrompts: string[],
+  seenUserPrompts: string[] = [],
+): RunnerDeps {
   return {
-    llmCall: makeCapturingLlmCall(seenSystemPrompts),
+    llmCall: makeCapturingLlmCall(seenSystemPrompts, seenUserPrompts),
     getTarget: () => target,
   };
 }
@@ -150,5 +164,37 @@ describe('judge knownToolNames grounding (EI-336)', () => {
     const prompt = seenSystemPrompts[0];
     expect(prompt).not.toContain('Known tool registry');
     expect(prompt).toContain('NO ground-truth tool registry');
+  });
+
+  it('renders bounded tool-result evidence into the judge transcript', async () => {
+    const seenSystemPrompts: string[] = [];
+    const seenUserPrompts: string[] = [];
+    const target = makeTarget({
+      toolNames: ['work_items:get'],
+      turn: {
+        assistantText: 'WI-200 is blocked.',
+        toolCalls: [{ name: 'work_items:get', input: { id: 'WI-200' } }],
+        toolResults: [{
+          name: 'work_items:get',
+          output: '{"ok":true,"state":"blocked","id":"WI-200"}',
+          isError: false,
+          truncated: false,
+          sourceChars: 46,
+        }],
+      },
+    });
+
+    await runScenario(
+      makeScenario(),
+      {},
+      makeDeps(target, seenSystemPrompts, seenUserPrompts),
+    );
+
+    expect(seenUserPrompts).toHaveLength(1);
+    expect(seenUserPrompts[0]).toContain('**Tool results:**');
+    expect(seenUserPrompts[0]).toContain('work_items:get [ok]');
+    expect(seenUserPrompts[0]).toContain('state');
+    expect(seenUserPrompts[0]).toContain('blocked');
+    expect(seenUserPrompts[0]).toContain('WI-200');
   });
 });

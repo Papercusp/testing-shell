@@ -176,6 +176,25 @@ export interface ToolCallEvent {
   overridden?: boolean;
 }
 
+/** Maximum safe excerpt carried for one tool result. */
+export const TOOL_RESULT_EVIDENCE_MAX_CHARS = 2_000;
+
+/** Maximum number of result excerpts retained for one SUT turn. */
+export const TOOL_RESULT_EVIDENCE_MAX_EVENTS = 32;
+
+/**
+ * Judge-visible evidence for one tool result. `output` is already scrubbed and
+ * bounded; `sourceChars` records the pre-redaction source size so truncation is
+ * explicit without retaining the omitted bytes.
+ */
+export interface ToolResultEvent {
+  name: string;
+  output: string;
+  isError: boolean;
+  truncated: boolean;
+  sourceChars: number;
+}
+
 export interface CardEvent {
   kind: string;
   /** Choice options if presentation is radio/select. */
