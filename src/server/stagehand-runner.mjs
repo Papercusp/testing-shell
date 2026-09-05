@@ -6,7 +6,11 @@
  * universal-testing-domains-generic-2026-06-03).
  *
  * Reads a JSON config from stdin:
- *   { goal, startUrl, model, apiKey, maxSteps, maxCostUsd, headless }
+ *   { goal, startUrl, model, apiKey, baseUrl?, maxSteps, maxCostUsd, headless }
+ * `baseUrl` (optional) points the Stagehand model client at an Anthropic-compatible
+ * surface other than api.anthropic.com — e.g. the inference gateway, so this runner can
+ * use the default account instead of a raw key. Pass the ROOT (no `/v1`): the Anthropic
+ * SDK appends `/v1/messages` itself.
  * `startUrl` is REQUIRED — the lib bakes in no project-specific default; the
  * caller (each app's route) supplies it.
  *
@@ -73,6 +77,8 @@ async function main() {
   const startUrl = String(cfg.startUrl ?? '').trim();
   const modelName = String(cfg.model ?? 'anthropic/claude-sonnet-4-6');
   const apiKey = String(cfg.apiKey ?? '');
+  // Optional Anthropic-compatible base URL (gateway root, no `/v1`). Empty ⇒ the SDK default.
+  const baseURL = String(cfg.baseUrl ?? '').trim();
   const maxSteps = Number(cfg.maxSteps ?? 20);
   const maxCostUsd = Number(cfg.maxCostUsd ?? 1.0);
   const headless = cfg.headless !== false;
@@ -95,7 +101,11 @@ async function main() {
 
   const stagehand = new Stagehand({
     env: 'LOCAL',
-    model: { modelName, apiKey },
+    // Stagehand's ModelConfiguration is `ClientOptions & { modelName }`, and ClientOptions
+    // carries both `apiKey` and `baseURL` (v3 types/public/model.d.ts) — so pointing this at
+    // the gateway needs no custom transport, just the extra field. Omitted when unset so the
+    // direct-to-Anthropic path is unchanged.
+    model: { modelName, apiKey, ...(baseURL ? { baseURL } : {}) },
     verbose: 0,
     localBrowserLaunchOptions: { headless },
     logger: (entry) => {

@@ -104,10 +104,36 @@ export interface SpawnAiExploreOpts {
   repoRoot: string;
   /** Anthropic (or provider) API key, injected by the caller's credential store. */
   apiKey: string;
+  /**
+   * Optional provider base URL for the runner's Stagehand model client — the ROOT of an
+   * Anthropic-compatible surface (e.g. an inference gateway at `http://127.0.0.1:8788`),
+   * NOT a `/v1` suffixed one: the Anthropic SDK appends `/v1/messages` itself, so a `/v1`
+   * base silently 404s on `/v1/v1/messages`.
+   *
+   * When this points at a credential-injecting gateway, `apiKey` is a placeholder the proxy
+   * discards (its STRIP_REQUEST drops inbound `authorization`/`x-api-key` and substitutes the
+   * resolved account's own credential + the `anthropic-beta: oauth-2025-04-20` header an
+   * OAuth-bearer subscription needs). It is still REQUIRED because the Anthropic SDK throws
+   * locally on a missing key before any request is made.
+   */
+  baseUrl?: string;
 }
 
 /**
- * Spawn the stagehand runner with `cfg` (+apiKey) written to stdin. Returns the
+ * The runner's stdin payload. `baseUrl` is included ONLY when set, so the no-gateway path
+ * stays byte-identical to what it was before that seam existed. Shared by both spawners so
+ * the two cannot drift on which fields reach the subprocess.
+ */
+function runnerPayload(cfg: AiExploreConfig, opts: SpawnAiExploreOpts): string {
+  return JSON.stringify({
+    ...cfg,
+    apiKey: opts.apiKey,
+    ...(opts.baseUrl ? { baseUrl: opts.baseUrl } : {}),
+  });
+}
+
+/**
+ * Spawn the stagehand runner with `cfg` (+apiKey, +baseUrl) written to stdin. Returns the
  * child; the caller reads child.stdout NDJSON (via parseAiExploreLine). Returns
  * null when the runner can't be resolved.
  */
@@ -119,7 +145,7 @@ export function spawnAiExplore(cfg: AiExploreConfig, opts: SpawnAiExploreOpts): 
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, NODE_OPTIONS: '' },
   });
-  child.stdin?.write(JSON.stringify({ ...cfg, apiKey: opts.apiKey }));
+  child.stdin?.write(runnerPayload(cfg, opts));
   child.stdin?.end();
   return child;
 }
@@ -145,7 +171,7 @@ export function spawnAiExploreSSE(cfg: AiExploreConfig, opts: SpawnAiExploreOpts
         return;
       }
       const child = spawn(process.execPath, [runner], { cwd: opts.repoRoot, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NODE_OPTIONS: '' } });
-      child.stdin?.write(JSON.stringify({ ...cfg, apiKey: opts.apiKey }));
+      child.stdin?.write(runnerPayload(cfg, opts));
       child.stdin?.end();
 
       let outBuf = '';

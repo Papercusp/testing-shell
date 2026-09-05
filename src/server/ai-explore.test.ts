@@ -109,6 +109,32 @@ describe('spawnAiExplore', () => {
     vi.mocked(existsSync).mockReturnValue(false);
     expect(spawnAiExplore({ goal: 'g', startUrl: 'u', model: 'm', maxSteps: 1, maxCostUsd: 1, headless: true }, { repoRoot: '/repo', apiKey: 'k' })).toBeNull();
   });
+
+  // WI-37573: the gateway seam. The runner points Stagehand's model client at `baseUrl`, which
+  // is what lets this route use the default account instead of a raw Anthropic key.
+  it('threads baseUrl to the runner when one is supplied', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    const child = fakeChild();
+    vi.mocked(spawn).mockReturnValue(child as never);
+    const cfg = { goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 5, maxCostUsd: 1, headless: true };
+    spawnAiExplore(cfg, { repoRoot: '/repo', apiKey: 'placeholder', baseUrl: 'http://127.0.0.1:8788' });
+    const written = child.stdin.write.mock.calls[0][0] as string;
+    expect(JSON.parse(written)).toMatchObject({ apiKey: 'placeholder', baseUrl: 'http://127.0.0.1:8788' });
+  });
+
+  // The claim the production comment makes: omitting baseUrl leaves the direct-to-Anthropic
+  // payload byte-identical, so this seam cannot perturb the pre-existing path. `toMatchObject`
+  // would pass on a stray `baseUrl: undefined`, so assert on the KEY's absence.
+  it('omits baseUrl entirely when none is supplied', () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    const child = fakeChild();
+    vi.mocked(spawn).mockReturnValue(child as never);
+    const cfg = { goal: 'g', startUrl: 'http://x/', model: 'm', maxSteps: 5, maxCostUsd: 1, headless: true };
+    spawnAiExplore(cfg, { repoRoot: '/repo', apiKey: 'sk-123' });
+    const written = child.stdin.write.mock.calls[0][0] as string;
+    expect(Object.keys(JSON.parse(written))).not.toContain('baseUrl');
+    expect(written).toBe(JSON.stringify({ ...cfg, apiKey: 'sk-123' }));
+  });
 });
 
 describe('spawnAiExploreSSE', () => {
