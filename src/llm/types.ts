@@ -172,6 +172,12 @@ export interface TurnResult {
 export interface ToolCallEvent {
   name: string;
   input: unknown;
+  /**
+   * Zero-based model-response iteration within the outer turn. Calls sharing
+   * one index were chosen before the model observed any result from that batch;
+   * a later index proves a tool-result boundary was crossed.
+   */
+  responseIndex?: number;
   /** True if the dispatcher override fielded this call. */
   overridden?: boolean;
 }
