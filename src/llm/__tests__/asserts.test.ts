@@ -31,6 +31,7 @@ function makeRun(over: Partial<RunSummary> = {}): RunSummary {
     runId: 'r1',
     scenarioId: 'op-test',
     scenarioVersion: 1,
+    scenarioTarget: 'operator',
     identityHash: 'h',
     sutModel: 'claude-sonnet-4-6',
     judgeModel: 'claude-sonnet-4-6',

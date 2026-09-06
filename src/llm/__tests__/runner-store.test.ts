@@ -155,6 +155,7 @@ describe('runScenario — store persistence seam (P-071)', () => {
     expect(sends.value).toBeGreaterThanOrEqual(1);
     expect(report.scenarioId).toBe('fake-S01-store-seam');
     expect(report.runs).toHaveLength(1);
+    expect(report.runs[0]?.summary.scenarioTarget).toBe('fake');
   });
 
   it('appends scripted trigger text as a deterministic user turn', async () => {
