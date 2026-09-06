@@ -544,7 +544,8 @@ export interface RunSummary {
    */
   timeout?: {
     cause: 'wallclock_deadline';
-    stage: 'turn_loop' | 'sim_user_next_action' | 'sut_session_send';
+    stage: 'turn_loop' | 'sim_user_next_action' | 'sut_session_send' | 'judge_run';
+    /** For judge_run, this is the number of completed SUT turns. */
     turnIndex: number;
   };
 }

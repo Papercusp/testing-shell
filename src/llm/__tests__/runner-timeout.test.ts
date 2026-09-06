@@ -58,9 +58,12 @@ describe('withTimeout', () => {
 // Runner wiring — a hung session.send / sim-user call must cap-breach, not hang
 // ---------------------------------------------------------------------------
 
-function makeFakeLlmCall(over?: { simHangs?: boolean }): LlmCallFn {
+function makeFakeLlmCall(over?: { simHangs?: boolean; judgeHangs?: boolean }): LlmCallFn {
   return async (opts) => {
     const isJudge = (opts.system ?? '').includes('external reviewer');
+    if (isJudge && over?.judgeHangs) {
+      return new Promise<never>(() => {}); // never resolves
+    }
     if (!isJudge && over?.simHangs) {
       return new Promise<never>(() => {}); // never resolves
     }
@@ -224,5 +227,68 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
     expect(report.runs[0].summary.finishReason).toBe('completed');
     expect(report.runs[0].summary.capBreaches).toEqual([]);
     expect(report.runs[0].summary.timeout).toBeUndefined();
+  });
+
+  it('persists a judge timeout as an infrastructure error and releases the matrix claim', async () => {
+    vi.useFakeTimers();
+    const previousSkipClaim = process.env.PAPERCUSP_LLM_TEST_SKIP_CLAIM;
+    delete process.env.PAPERCUSP_LLM_TEST_SKIP_CLAIM;
+    try {
+      const release = vi.fn(async () => {});
+      const persistRunReport = vi.fn(async () => {});
+      const scenario = makeScenario({
+        // Produce one real SUT turn, then let the sim-user declare success so
+        // the runner reaches the post-loop judge with a usable transcript.
+        triggers: [{ on: 'after_turn', param: 0, fire: 'user_message', text: 'begin' }],
+      });
+      const promise = runScenario(scenario, { forceRepeat: 1 }, {
+        ...makeDeps(makeNormalTarget()),
+        llmCall: makeFakeLlmCall({ judgeHangs: true }),
+        claim: {
+          tryClaim: vi.fn(async () => ({
+            ok: true as const,
+            claimKey: 'claim-1',
+            ownerId: 'runner-1',
+            expiresAt: new Date(Date.now() + 60_000),
+          })),
+          release,
+        },
+        store: { persistRunReport },
+      });
+      const assertion = expect(promise).resolves.toMatchObject({
+        verdict: 'errored',
+        runs: [
+          {
+            status: 'errored',
+            summary: {
+              finishReason: 'completed',
+              capBreaches: ['wallclock'],
+              timeout: {
+                cause: 'wallclock_deadline',
+                stage: 'judge_run',
+                turnIndex: 1,
+              },
+            },
+            judge: {
+              findings: [
+                {
+                  axis: 'meta',
+                  severity: 'error',
+                },
+              ],
+            },
+          },
+        ],
+      });
+      await vi.advanceTimersByTimeAsync(120_001);
+      await assertion;
+      expect(release).toHaveBeenCalledOnce();
+      expect(release).toHaveBeenCalledWith('claim-1', expect.any(String));
+      expect(persistRunReport).toHaveBeenCalledOnce();
+    } finally {
+      if (previousSkipClaim === undefined) delete process.env.PAPERCUSP_LLM_TEST_SKIP_CLAIM;
+      else process.env.PAPERCUSP_LLM_TEST_SKIP_CLAIM = previousSkipClaim;
+      vi.useRealTimers();
+    }
   });
 });

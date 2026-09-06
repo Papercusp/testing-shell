@@ -227,6 +227,39 @@ export function buildInconclusiveJudge(rubric: JudgeRubric, reason: string): Jud
   };
 }
 
+/**
+ * Synthetic judge result for a transcript that exists but whose external
+ * judge call exhausted its own bounded deadline. This is deliberately
+ * distinct from {@link buildInconclusiveJudge}: the SUT produced auditable
+ * output, so calling it an SUT-health failure would erase the most important
+ * diagnostic fact. The runner persists this result and marks the arm errored;
+ * it must never be interpreted as either behavioral acceptance or rejection.
+ */
+export function buildJudgeTimeoutJudge(rubric: JudgeRubric, reason: string): JudgeResult {
+  const scores: Record<string, number> = {};
+  for (const axis of rubric.axes) scores[axis.id] = 0;
+  return {
+    scores,
+    findings: [
+      {
+        axis: 'meta',
+        severity: 'error',
+        shape: computeFindingShape('meta', 'judge_timeout'),
+        claim:
+          `Run is inconclusive — the external judge did not complete (${reason}). ` +
+          'The SUT transcript was produced and retained; this is an evaluation-infrastructure failure, ' +
+          'not an operator behavioral finding.',
+        suggestion:
+          'Re-run the judge when provider capacity is healthy. Do not count this arm as behavioral evidence.',
+        copyPrompt: '(inconclusive run — judge timeout; no copy prompt)',
+        isNovel: false,
+      },
+    ],
+    judgeOverruledAssert: false,
+    costUsd: 0,
+  };
+}
+
 // =============================================================================
 // Prompt construction
 // =============================================================================

@@ -25,7 +25,12 @@ import { hostname } from 'node:os';
 import { evaluateAsserts } from './asserts/index';
 import type { RunnerDeps } from './deps';
 import { computeIdentityHash, computeScenarioHash } from './identity';
-import { judgeRun, buildInconclusiveJudge, JUDGE_PROMPT_SCAFFOLD_VERSION } from './judge';
+import {
+  judgeRun,
+  buildInconclusiveJudge,
+  buildJudgeTimeoutJudge,
+  JUDGE_PROMPT_SCAFFOLD_VERSION,
+} from './judge';
 import { resolveJudgeModel } from './judges/registry';
 import { lookupBlend } from './personas/blends';
 import { resolvePersona } from './personas/traits';
@@ -681,65 +686,92 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     ...(timeout && { timeout }),
   };
 
-  // Deterministic asserts.
-  const violations = evaluateAsserts(scenario.asserts, summary);
+  try {
+    // Deterministic asserts.
+    const violations = evaluateAsserts(scenario.asserts, summary);
 
-  // SUT-health gate: when the SUT produced no usable output (a turn
-  // errored, or every turn came back empty), the judge would only
-  // describe the broken environment — confident axis failures that
-  // aren't operator findings. Skip it, emit one clean meta finding,
-  // and save the judge LLM cost.
-  const inconclusive = inconclusiveReason(turns, finishReason);
-  let judge: JudgeResult;
-  if (inconclusive) {
-    judge = buildInconclusiveJudge(scenario.rubric, inconclusive);
-  } else {
-    const personaSummary = describePersona(persona);
-    const goalSummary = describeGoal(scenario.goal);
-    // Timeout-guarded (EI-7597): the turn loop's own maxWallSecs is spent by
-    // now (or the loop finished early with little left), so the judge call —
-    // a single unbounded LLM request — gets its own fixed, generous budget
-    // rather than silently hanging past everything else.
-    judge = await withTimeout(
-      judgeRun(
-        {
-          model: judgeModel,
-          sutModel,
-          rubric: scenario.rubric,
-          scenarioId: scenario.id,
-          scenarioDescription: scenario.description,
-          personaSummary,
-          goalSummary,
-          // EI-336: ground the judge's tool-name claims against the target's
-          // real catalog when it declares one — fixes the judge flagging a
-          // genuinely-real tool (e.g. `locks:acquire`) as "fabricated".
-          ...(target.toolNames ? { knownToolNames: target.toolNames } : {}),
-        },
-        summary,
-        violations,
-        deps.llmCall,
-      ),
-      JUDGE_CALL_TIMEOUT_MS,
-      `judgeRun (scenario '${scenario.id}')`,
-    );
-  }
+    // SUT-health gate: when the SUT produced no usable output (a turn
+    // errored, or every turn came back empty), the judge would only
+    // describe the broken environment — confident axis failures that
+    // aren't operator findings. Skip it, emit one clean meta finding,
+    // and save the judge LLM cost.
+    const inconclusive = inconclusiveReason(turns, finishReason);
+    let judge: JudgeResult;
+    let judgeInfrastructureFailure = false;
+    if (inconclusive) {
+      judge = buildInconclusiveJudge(scenario.rubric, inconclusive);
+    } else {
+      const personaSummary = describePersona(persona);
+      const goalSummary = describeGoal(scenario.goal);
+      // Timeout-guarded (EI-7597): the turn loop's own maxWallSecs is spent by
+      // now (or the loop finished early with little left), so the judge call —
+      // a single unbounded LLM request — gets its own fixed, generous budget
+      // rather than silently hanging past everything else.
+      try {
+        judge = await withTimeout(
+          judgeRun(
+            {
+              model: judgeModel,
+              sutModel,
+              rubric: scenario.rubric,
+              scenarioId: scenario.id,
+              scenarioDescription: scenario.description,
+              personaSummary,
+              goalSummary,
+              // EI-336: ground the judge's tool-name claims against the target's
+              // real catalog when it declares one — fixes the judge flagging a
+              // genuinely-real tool (e.g. `locks:acquire`) as "fabricated".
+              ...(target.toolNames ? { knownToolNames: target.toolNames } : {}),
+            },
+            summary,
+            violations,
+            deps.llmCall,
+          ),
+          JUDGE_CALL_TIMEOUT_MS,
+          `judgeRun (scenario '${scenario.id}')`,
+        );
+      } catch (err) {
+        if (!(err instanceof LlmTestTimeoutError)) throw err;
+        judgeInfrastructureFailure = true;
+        summary.capBreaches.push('wallclock');
+        summary.timeout = {
+          cause: 'wallclock_deadline',
+          stage: 'judge_run',
+          // The judge is post-loop; record the completed-turn count rather
+          // than pretending its deadline belonged to one SUT turn.
+          turnIndex: turns.length,
+        };
+        judge = buildJudgeTimeoutJudge(scenario.rubric, err.message);
+      }
+    }
 
-  // Roll sim-user + judge cost into the summary so PG sees the
-  // honest envelope, not just the SUT-side cost (which is currently
-  // zero because operator-converse doesn't return per-stream cost).
-  summary.totalCostUsd += simUser.costUsd + judge.costUsd;
+    // Roll sim-user + judge cost into the summary so PG sees the
+    // honest envelope, not just the SUT-side cost (which is currently
+    // zero because operator-converse doesn't return per-stream cost).
+    summary.totalCostUsd += simUser.costUsd + judge.costUsd;
 
-  const status = computeRunStatus({ finishReason, inconclusive, violations, judge, rubric: scenario.rubric });
+    const status = computeRunStatus({
+      finishReason,
+      inconclusive,
+      infrastructureFailure: judgeInfrastructureFailure,
+      violations,
+      judge,
+      rubric: scenario.rubric,
+    });
 
-  if (claimKey && deps.claim) {
-    try {
-      await deps.claim.release(claimKey, claimOwner);
-    } catch (err) {
-      console.warn(`[llm-testing] claim release failed (${(err as Error).message}); claim will TTL out.`);
+    return { summary, simHistory, violations, judge, status };
+  } finally {
+    // A judge timeout or parser/transport failure must not strand this matrix
+    // arm's claim until TTL. Release is best-effort (the ledger's dead-owner
+    // reaper remains the fallback), but it now runs on every post-turn path.
+    if (claimKey && deps.claim) {
+      try {
+        await deps.claim.release(claimKey, claimOwner);
+      } catch (err) {
+        console.warn(`[llm-testing] claim release failed (${(err as Error).message}); claim will TTL out.`);
+      }
     }
   }
-
-  return { summary, simHistory, violations, judge, status };
 }
 
 /**
@@ -786,12 +818,14 @@ export function inconclusiveReason(
 export function computeRunStatus(args: {
   finishReason: RunSummary['finishReason'];
   inconclusive: string | null;
+  /** Test infrastructure failed after the SUT produced a usable transcript. */
+  infrastructureFailure?: boolean;
   violations: Violation[];
   judge: JudgeResult;
   rubric: JudgeRubric;
 }): SingleRunReport['status'] {
-  const { finishReason, inconclusive, violations, judge, rubric } = args;
-  if (finishReason === 'errored' || inconclusive) return 'errored';
+  const { finishReason, inconclusive, infrastructureFailure, violations, judge, rubric } = args;
+  if (finishReason === 'errored' || inconclusive || infrastructureFailure) return 'errored';
   if (violations.some((v) => v.severity === 'error')) return 'failed';
   if (judge.findings.some((f) => f.severity === 'error') && !rubric.judgeAdvisory) return 'failed';
   return 'passed';
