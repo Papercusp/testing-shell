@@ -665,6 +665,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     runId,
     scenarioId: scenario.id,
     scenarioVersion: scenario.version,
+    scenarioTarget: scenario.target,
     identityHash,
     matrixGroupId: args.matrixGroupId,
     matrixIndex: args.matrixIndex,

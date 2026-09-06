@@ -518,6 +518,8 @@ export interface RunSummary {
   runId: string;
   scenarioId: string;
   scenarioVersion: number;
+  /** The registered chat target that executed this scenario (e.g. `operator` or `su`). */
+  scenarioTarget: string;
   identityHash: string;
   matrixGroupId?: string;
   matrixIndex?: number;
