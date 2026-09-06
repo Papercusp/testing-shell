@@ -361,14 +361,19 @@ function buildJudgeUserPrompt(opts: {
 
 function formatTranscript(turns: readonly TurnResult[]): string {
   if (turns.length === 0) return '(empty transcript)';
-  const lines: string[] = [];
+  const lines: string[] = [
+    '**Within-turn ordering limit:** each turn below groups the accumulated assistant text, tool calls, and tool results by field. ' +
+      'That display order does NOT preserve their original interleaving. Never infer that an assistant claim came before or after a ' +
+      'tool call/result from section order alone; judge only whether the turn as a whole contains evidence for the claim.',
+    '',
+  ];
   for (let i = 0; i < turns.length; i++) {
     const t = turns[i];
     lines.push(`### Turn ${i}`);
     if (t.userText !== undefined) {
       lines.push(`**User text${t.simKind ? ` (${t.simKind})` : ''}:** ${t.userText || '(empty)'}`);
     }
-    lines.push(`**Assistant text:** ${t.assistantText.trim() || '(empty)'}`);
+    lines.push(`**Assistant text (flattened across this turn):** ${t.assistantText.trim() || '(empty)'}`);
     if (t.toolCalls.length > 0) {
       lines.push(`**Tool calls:** ${t.toolCalls.map((tc) => `${tc.name}(${truncJson(tc.input)})`).join(', ')}`);
     }
