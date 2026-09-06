@@ -191,6 +191,10 @@ describe('judge knownToolNames grounding (EI-336)', () => {
     );
 
     expect(seenUserPrompts).toHaveLength(1);
+    expect(seenUserPrompts[0]).toContain('**Within-turn ordering limit:**');
+    expect(seenUserPrompts[0]).toContain('does NOT preserve their original interleaving');
+    expect(seenUserPrompts[0]).toContain('Never infer that an assistant claim came before or after');
+    expect(seenUserPrompts[0]).toContain('**Assistant text (flattened across this turn):**');
     expect(seenUserPrompts[0]).toContain('**Tool results:**');
     expect(seenUserPrompts[0]).toContain('work_items:get [ok]');
     expect(seenUserPrompts[0]).toContain('state');
