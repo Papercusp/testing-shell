@@ -54,6 +54,7 @@ import type {
   ScenarioVariant,
   TurnInput,
   TurnResult,
+  ToolResultEvent,
   TurnTrigger,
   Violation,
 } from './types';
@@ -163,6 +164,31 @@ export const DEFAULT_COMPACTION_SUMMARY =
   '[Earlier conversation compacted to save context. The verbatim details of ' +
   'prior turns — including any data snapshots the assistant previously ' +
   'retrieved — are no longer available here and must be re-fetched if needed.]';
+
+/**
+ * Render the bounded tool evidence from one completed SUT turn into the
+ * cross-turn wire history. The target consumes raw tool results while it is
+ * servicing a turn, but the runner starts each subsequent `session.send`
+ * from the threaded history; dropping this evidence makes a later user turn
+ * appear to have forgotten facts the SUT just read (S31c exposed this with a
+ * canonical SQL result read in turn 0 and then missing in turn 1).
+ *
+ * ToolResultEvent.output is already redacted and bounded by the target layer.
+ * Keep the wrapper explicit so the model treats it as prior tool evidence,
+ * not as a new user assertion.
+ */
+export function renderPriorToolResults(results: readonly ToolResultEvent[]): string {
+  if (results.length === 0) return '';
+  const body = results
+    .map((result, index) => {
+      const status = result.isError ? ' error' : '';
+      return `tool[${index}] ${result.name}${status}\n${result.output}`;
+    })
+    .join('\n\n');
+  return '[Prior-turn tool results — authoritative evidence retained by the runner]\n' +
+    body +
+    '\n[End prior-turn tool results]';
+}
 
 /**
  * Apply a {@link CompactionPolicy} to a wire-message history (P-006). Pure:
@@ -616,6 +642,14 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       turns.push(result);
       simHistory.push({ who: 'sut', turn: result });
       wireMessages.push({ role: 'assistant', content: result.assistantText });
+      const priorToolResults = renderPriorToolResults(result.toolResults);
+      if (priorToolResults) {
+        // Tool results are user-role content in the Anthropic wire protocol.
+        // Keep them in the outer runner history as a clearly delimited user
+        // message so the next `session.send` can ground itself in the exact
+        // bounded evidence observed during this turn.
+        wireMessages.push({ role: 'user', content: priorToolResults });
+      }
       totalCostUsd += result.costUsd;
       openCards = result.cards;
 
