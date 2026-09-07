@@ -220,4 +220,52 @@ describe('runner compaction seam wiring', () => {
     expect(JSON.stringify(captured[1])).toContain('SIM_TURN_0');
     expect(JSON.stringify(captured[1])).toContain('ASSISTANT_TURN_0');
   });
+
+  it('threads bounded prior-turn tool evidence into the next send', async () => {
+    const captured: WireMsg[][] = [];
+    const target: ChatTarget = {
+      id: 'fake-tool-results',
+      behaviors: [],
+      async open(): Promise<ChatSession> {
+        let turn = 0;
+        return {
+          sessionId: 's-tool-results',
+          async send(input: TurnInput): Promise<TurnResult> {
+            captured.push(input.messages.map((m) => ({ ...m })));
+            const current = turn++;
+            return {
+              assistantText: `ASSISTANT_TOOL_TURN_${current}`,
+              toolCalls: current === 0 ? [{ name: 'dev:pg_query', input: { sql: 'SELECT 1' } }] : [],
+              toolResults: current === 0 ? [{
+                name: 'dev:pg_query',
+                output: '{"rows":[{"sql":"canonical backfill"}]}',
+                isError: false,
+                truncated: false,
+                sourceChars: 40,
+              }] : [],
+              cards: [],
+              controlTags: [],
+              costUsd: 0,
+              latencyMs: 1,
+              finishReason: 'done',
+              rawSseTape: [],
+            };
+          },
+          async close() {},
+        };
+      },
+    };
+
+    await runScenario(
+      makeScenario(),
+      {},
+      makeDeps(target, makeFakeLlmCall(2)),
+    );
+
+    expect(captured.length).toBeGreaterThanOrEqual(2);
+    const turn1 = JSON.stringify(captured[1]);
+    expect(turn1).toContain('[Prior-turn tool results');
+    expect(turn1).toContain('canonical backfill');
+    expect(turn1).toContain('dev:pg_query');
+  });
 });
