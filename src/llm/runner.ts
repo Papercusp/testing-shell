@@ -423,6 +423,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       transport: scenario.transport ?? 'http-sse',
       dispatchOverride: scenario.toolOverride,
       ...(args.variant !== undefined && { variant: args.variant }),
+      ...(scenario.targetConfig !== undefined && { targetConfig: scenario.targetConfig }),
     });
   } catch (err) {
     // open() failed after setup applied — clean the seeds before rethrowing.

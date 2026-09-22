@@ -96,6 +96,12 @@ export interface SessionOptions {
    * declaring `supportsVariants` — the runner gates it.
    */
   variant?: ScenarioVariant;
+  /**
+   * The scenario's `targetConfig`, delivered verbatim. The shell never
+   * interprets it; each target validates its own keys at open() and fails
+   * loud on an unknown key or malformed value.
+   */
+  targetConfig?: Readonly<Record<string, unknown>>;
 }
 
 export interface ChatSession {
@@ -319,6 +325,13 @@ export interface Scenario {
   realWorkspace?: boolean;
   transport?: 'in-process' | 'http-sse';
   toolOverride?: ToolDispatchOverride;
+  /**
+   * Target-specific session configuration, passed verbatim to `target.open()`
+   * as `SessionOptions.targetConfig` — e.g. the su target's `modes`, which bind
+   * the registry modes the scenario's world claims are active into the rendered
+   * prompt. Opaque to the shell; the target owns its schema.
+   */
+  targetConfig?: Readonly<Record<string, unknown>>;
   fixtures?: { sseTapePath?: string };
   /**
    * Compaction seam (P-006) — when set, the runner rewrites the wire history
