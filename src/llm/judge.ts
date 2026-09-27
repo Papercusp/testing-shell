@@ -66,7 +66,10 @@ export async function judgeRun(
   const telemetryStrip = formatTelemetry(run);
   const violationsBlock = formatViolations(violations);
 
-  const system = buildJudgeSystemPrompt(opts);
+  const system = buildJudgeSystemPrompt({
+    ...opts,
+    knownToolNames: knownToolNamesFromRun(opts.knownToolNames, run),
+  });
   const userPrompt = buildJudgeUserPrompt({
     transcript,
     telemetryStrip,
@@ -264,6 +267,30 @@ export function buildJudgeTimeoutJudge(rubric: JudgeRubric, reason: string): Jud
 // Prompt construction
 // =============================================================================
 
+/** Discovery proves a deferred tool exists even when activated:false requires
+ * tools:invoke. Attempted calls and assistant prose do not establish existence.
+ * Unreadable, failed and truncated discovery remains unknown.
+ */
+function knownToolNamesFromRun(initial: readonly string[] | undefined, run: RunSummary): string[] {
+  const names = new Set(initial ?? []);
+  for (const turn of run.turns) {
+    for (const result of turn.toolResults) {
+      if (result.name !== 'tools:find' || result.isError || result.truncated) continue;
+      let payload: unknown;
+      try { payload = JSON.parse(result.output); } catch { continue; }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) continue;
+      const discovery = payload as Record<string, unknown>;
+      if (discovery.ok === false || discovery.error || !Array.isArray(discovery.hits)) continue;
+      for (const hit of discovery.hits) {
+        if (!hit || typeof hit !== 'object') continue;
+        const name = (hit as Record<string, unknown>).tool;
+        if (typeof name === 'string' && name.length <= 200 && /^[\w:.-]+$/.test(name)) names.add(name);
+      }
+    }
+  }
+  return [...names];
+}
+
 function buildJudgeSystemPrompt(opts: JudgeOpts): string {
   return [
     `You are evaluating a transcript from the **${opts.scenarioId}** test scenario.`,
@@ -288,12 +315,13 @@ function buildJudgeSystemPrompt(opts: JudgeOpts): string {
     ...(opts.knownToolNames?.length
       ? [
           '## Known tool registry (ground truth — EI-336)',
-          'This is the REAL, complete set of tool names available to the assistant this run. ' +
+          'These tool names were offered initially or returned by successful tool discovery in this run. ' +
             'Any tool name the transcript uses that appears here IS REAL — never call it ' +
             '"fabricated", "invented", or "does not exist in any registry", regardless of ' +
-            "whether you personally recognize it. Only a name ABSENT from this list may be " +
-            'flagged as a possible fabrication, and even then hedge (you cannot see the full ' +
-            'live registry, only this run\'s offered subset).',
+            'whether you personally recognize it. A successful tools:find receipt can expose ' +
+            'additional tools callable through tools:invoke even when activated:false. ' +
+            'This list is not the complete live registry; absence alone is not proof of fabrication. ' +
+            'Tool existence does not establish correct arguments, authorization, or successful execution.',
           opts.knownToolNames.map((n) => `\`${n}\``).join(', '),
           '',
         ]

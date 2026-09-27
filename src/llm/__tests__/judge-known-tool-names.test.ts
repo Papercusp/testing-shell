@@ -166,6 +166,47 @@ describe('judge knownToolNames grounding (EI-336)', () => {
     expect(prompt).toContain('NO ground-truth tool registry');
   });
 
+  it('grounds deferred names in successful discovery receipts, not attempted calls or assistant claims', async () => {
+    const seen: string[] = [];
+    const output = JSON.stringify({
+      hits: [{ tool: 'plans:set-plan-status', argSchema: 'slug:string; status:string' }],
+      activated: false,
+      howToCall: 'Use tools:invoke with the exact tool and args.',
+    });
+    const target = makeTarget({
+      toolNames: ['tools:find', 'tools:invoke'],
+      turn: {
+        assistantText: 'I can also call invented:claim.',
+        toolCalls: [{ name: 'tools:invoke', input: { name: 'invented:call', args: {} } }],
+        toolResults: [{ name: 'tools:find', output, isError: false, truncated: false, sourceChars: output.length }],
+      },
+    });
+    await runScenario(makeScenario(), {}, makeDeps(target, seen));
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain('`plans:set-plan-status`');
+    expect(seen[0]).not.toContain('invented:claim');
+    expect(seen[0]).not.toContain('invented:call');
+  });
+
+  it.each([
+    { name: 'tools:find', isError: true, truncated: false, ok: true },
+    { name: 'tools:find', isError: false, truncated: true, ok: true },
+    { name: 'tools:find', isError: false, truncated: false, ok: false },
+    { name: 'docs:get', isError: false, truncated: false, ok: true },
+  ])('does not promote unverified discovery into the registry: %j', async ({ name, isError, truncated, ok }) => {
+    const seen: string[] = [];
+    const output = JSON.stringify({ ok, hits: [{ tool: 'unverified:tool' }] });
+    const target = makeTarget({
+      toolNames: ['tools:find'],
+      turn: { toolResults: [{ name, output, isError, truncated, sourceChars: output.length }] },
+    });
+    await runScenario(makeScenario(), {}, makeDeps(target, seen));
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).not.toContain('`unverified:tool`');
+  });
+
   it('renders bounded tool-result evidence into the judge transcript', async () => {
     const seenSystemPrompts: string[] = [];
     const seenUserPrompts: string[] = [];
