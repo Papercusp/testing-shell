@@ -105,6 +105,16 @@ export interface LlmCallOpts {
   ownerId?: string;
 }
 
+/** Execution receipt from the host that issued the call. A module subset is
+ * retained separately from a complete transport pin. Unknown remote code
+ * remains unresolved even when a request and its usage completed. */
+export interface LlmExecutionReceipt {
+  model: string;
+  codeHash: string | null;
+  loadedCode?: Readonly<Record<string, string | null>>;
+  unresolved?: readonly string[];
+}
+
 export interface LlmCallResult {
   text: string;
   json?: unknown;
@@ -116,6 +126,7 @@ export interface LlmCallResult {
   /** Gateway account that actually served the request, when exposed by the
    * transport's `x-papercusp-routed-account` response header. */
   servedAccount?: string;
+  execution?: LlmExecutionReceipt;
   raw: unknown;
 }
 
