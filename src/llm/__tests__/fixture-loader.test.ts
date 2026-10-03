@@ -8,7 +8,9 @@ import { tmpdir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadFixtureTranscript, loadFixtureTurn } from '../fixtures/loader';
+import { loadFixtureTelemetry, loadFixtureTranscript, loadFixtureTurn } from '../fixtures/loader';
+import { evaluateAsserts } from '../asserts';
+import type { RunSummary } from '../types';
 
 let dir: string;
 
@@ -24,6 +26,76 @@ function write(name: string, body: string): string {
   writeFileSync(p, body, 'utf8');
   return p;
 }
+
+describe('loadFixtureTelemetry', () => {
+  it('round-trips exported canonical rows and restores dates for replay assertions', () => {
+    const startedAt = new Date('2026-10-03T10:00:00Z');
+    const tool = {
+      toolName: 'harness:status', argsJson: { slug: 'test' }, resultJson: { ok: true },
+      costUsd: 0.02, latencyMs: 17, metadataJson: { source: 'fixture' },
+    };
+    const chain = {
+      chainId: 'captured-chain', turnIdx: 0, trigger: 'continue', startedAt,
+      elapsedSecsInChain: 12, wasCapped: true, capReason: 'wallclock',
+    };
+    write('canonical.telemetry.json', JSON.stringify({
+      toolInvocations: [tool], continueChainRows: [chain],
+    }));
+    const telemetry = loadFixtureTelemetry(join(dir, 'canonical.sse'));
+    expect(telemetry).toEqual({ toolInvocations: [tool], continueChainRows: [chain] });
+    expect(telemetry?.continueChainRows[0].startedAt).toBeInstanceOf(Date);
+
+    const run: RunSummary = {
+      runId: 'fixture', scenarioId: 'fixture', scenarioVersion: 1, scenarioTarget: 'operator',
+      identityHash: 'fixture', sutModel: 'replay', judgeModel: 'replay', personaId: 'fixture',
+      personaTraits: {
+        verbosity: 'terse', politeness: 'neutral', clarification: 'never_clarifies',
+        goalClarity: 'precise', interrupts: false, modality: 'text',
+      },
+      workspaceMode: 'isolated', transportMode: 'http-sse', turns: [],
+      toolInvocations: telemetry!.toolInvocations, continueChainRows: telemetry!.continueChainRows,
+      totalCostUsd: 0, startedAt, finishedAt: startedAt, finishReason: 'completed', capBreaches: [],
+    };
+    expect(evaluateAsserts([{ kind: 'tool_called', name: 'harness:status' }], run)).toEqual([]);
+    expect(evaluateAsserts([{ kind: 'continue_chain_within_cap', maxTurns: 3, maxSecs: 10 }], run))
+      .toEqual([expect.objectContaining({ severity: 'error', claim: expect.stringContaining('12.0s') })]);
+  });
+
+  it('normalizes legacy tool names and metadata without losing evidence', () => {
+    write('legacy.telemetry.json', JSON.stringify({
+      toolInvocations: [{ name: 'coord:send', metadata_json: { uiClientId: 'fixture' } }],
+      continueChainRows: [],
+    }));
+    expect(loadFixtureTelemetry(join(dir, 'legacy.sse'))).toEqual({
+      toolInvocations: [{
+        toolName: 'coord:send', argsJson: null, resultJson: null, costUsd: 0, latencyMs: 0,
+        metadataJson: { uiClientId: 'fixture' },
+      }],
+      continueChainRows: [],
+    });
+  });
+
+  it('keeps missing sidecars and telemetry-free fixtures usable', () => {
+    expect(loadFixtureTelemetry(join(dir, 'missing.sse'))).toBeNull();
+    write('empty.telemetry.json', '{}');
+    expect(loadFixtureTelemetry(join(dir, 'empty.sse'))).toEqual({ toolInvocations: [], continueChainRows: [] });
+  });
+
+  it.each([
+    ['invalid date', { chainId: 'a', turnIdx: 0, trigger: 'continue', startedAt: 'invalid', elapsedSecsInChain: 1, wasCapped: false, capReason: null }],
+    ['missing chain identity', { ts: '2026-10-03T10:00:00Z', trigger: 'continue', secondsSinceChainStart: 1, chainTurnCount: 2 }],
+    ['invalid trigger', { chainId: 'a', turnIdx: 0, trigger: 'invented', startedAt: '2026-10-03T10:00:00Z', elapsedSecsInChain: 1, wasCapped: false, capReason: null }],
+  ])('rejects %s rather than turning invalid chain evidence into a passing replay', (_name, row) => {
+    write('invalid.telemetry.json', JSON.stringify({ toolInvocations: [], continueChainRows: [row] }));
+    expect(() => loadFixtureTelemetry(join(dir, 'invalid.sse'))).toThrow(/telemetry/i);
+  });
+
+  it.each(['null', '{', '{"toolInvocations":false}', '{"toolInvocations":[{}]}'])
+    ('rejects malformed present telemetry: %s', (body) => {
+      write('malformed.telemetry.json', body);
+      expect(() => loadFixtureTelemetry(join(dir, 'malformed.sse'))).toThrow();
+    });
+});
 
 describe('loadFixtureTurn', () => {
   it('assembles delta events into assistantText', () => {
