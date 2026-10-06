@@ -33,6 +33,10 @@ export interface LlmCallOpts {
   system?: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   maxTokens?: number;
+  /** Require the host to enforce maxTokens on the selected transport. A host
+   * must refuse before inference when it cannot enforce the limit. This bounds
+   * output tokens only; it does not establish a complete USD spend bound. */
+  requireOutputTokenLimit?: boolean;
   temperature?: number;
   responseFormat?: 'text' | 'json';
   /**
