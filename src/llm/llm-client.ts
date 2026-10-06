@@ -120,7 +120,12 @@ export interface LlmCallResult {
   json?: unknown;
   inputTokens: number;
   outputTokens: number;
+  /** Reported total, or the known subtotal when usage is incomplete. */
   costUsd: number;
+  /** A terminal response does not establish total spend when usage is missing. */
+  costUsdMeasurementMissing?: boolean;
+  /** Usage frames whose spend could not be measured by the transport. */
+  unreportedFrames?: number;
   /** Provider terminal reason when available (`end_turn`, `max_tokens`, …). */
   stopReason?: string | null;
   /** Gateway account that actually served the request, when exposed by the
