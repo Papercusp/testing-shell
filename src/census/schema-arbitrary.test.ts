@@ -13,7 +13,7 @@
  * `z.never()`, which admits NO value) and `propertyNames` (124).
  */
 
-import Ajv2020 from 'ajv/dist/2020';
+import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
