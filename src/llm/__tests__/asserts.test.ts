@@ -125,6 +125,33 @@ describe('tool_not_called', () => {
     expect(v).toHaveLength(1);
     expect(v[0].severity).toBe('error');
   });
+  it.each([
+    ['capability:bash', 'mcp__papercusp_su__capability_bash'],
+    ['capability:bash', 'mcp__papercusp__capability:bash'],
+    ['work_items:get', 'mcp__papercusp_su__work_items_get'],
+    ['release:checkpoint-run', 'mcp__papercusp_su__release_checkpoint_run'],
+    ['harness:status', 'mcp__harness__status'],
+  ])('matches %s through the complete MCP alias %s in tape and telemetry', (expected, actual) => {
+    for (const run of [
+      makeRun({ turns: [makeTurn({ toolCalls: [{ name: actual, input: {} }] })] }),
+      makeRun({ toolInvocations: [makeTi(actual)] }),
+    ]) {
+      expect(evaluateAsserts([{ kind: 'tool_not_called', name: expected }], run))
+        .toContainEqual(expect.objectContaining({ assertKind: 'tool_not_called', severity: 'error' }));
+      expect(evaluateAsserts([{ kind: 'tool_called', name: expected }], run)).toEqual([]);
+    }
+  });
+  it.each([
+    ['docs:get', 'reports:get'],
+    ['docs:get', 'mcp__reports__get'],
+    ['docs:get', 'mcp__papercusp_su__reports_get'],
+    ['capability:bash', 'mcp__papercusp_su__not_capability_bash'],
+    ['harness:status', 'mcp__harness__status_extra'],
+  ])('keeps %s distinct from %s', (expected, actual) => {
+    const run = makeRun({ turns: [makeTurn({ toolCalls: [{ name: actual, input: {} }] })] });
+    expect(evaluateAsserts([{ kind: 'tool_not_called', name: expected }], run)).toEqual([]);
+    expect(evaluateAsserts([{ kind: 'tool_called', name: expected }], run)).not.toEqual([]);
+  });
 });
 
 describe('auto_fire_happened / auto_fire_did_not_happen', () => {

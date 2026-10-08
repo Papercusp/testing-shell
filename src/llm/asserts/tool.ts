@@ -10,9 +10,9 @@ import type { Violation, RunSummary } from '../types';
  *
  * Tool names in tool_invocations are stored without the `mcp__*__` MCP
  * prefix (per plugin_name + tool_name); the SSE tape carries the brain-
- * facing alias. Comparing `endsWith(':' + tail)` is loose but matches
- * the operator's actual naming surface (e.g. `harness:status`,
- * `docs:get`, `issues:list`).
+ * facing alias. Match the complete group and verb for canonical names,
+ * including Codex's underscore-normalized MCP wrappers. A shared verb
+ * such as `get` is not enough to identify the tool.
  */
 function countCalls(name: string, run: RunSummary, argsMatch?: Record<string, unknown>): { count: number; firstTurn?: number } {
   let count = 0;
@@ -33,9 +33,15 @@ function countCalls(name: string, run: RunSummary, argsMatch?: Record<string, un
 
 function matchesName(actual: string, expected: string): boolean {
   if (actual === expected) return true;
-  // Tail-match: 'harness:status' matches 'mcp__harness__status' or '...:status'.
-  const tail = expected.includes(':') ? expected.split(':').pop()! : expected;
-  return actual.endsWith(`:${tail}`) || actual.endsWith(`__${tail}`);
+  // Legacy unqualified assertions intentionally cover the named verb.
+  if (!expected.includes(':')) return actual.endsWith(`:${expected}`) || actual.endsWith(`__${expected}`);
+  if (!actual.startsWith('mcp__')) return false;
+  const parts = actual.slice('mcp__'.length).split('__');
+  const normalized = expected.replace(/[:-]/g, '_');
+  // mcp__harness__status, mcp__server__harness:status and
+  // mcp__papercusp_su__harness_status describe the same canonical tool.
+  return [parts.at(-1)!, parts.slice(-2).join(':')].some(candidate =>
+    candidate === expected || candidate.replace(/[:-]/g, '_') === normalized);
 }
 
 registerEvaluator('tool_called', (a, run) => {
