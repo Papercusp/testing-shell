@@ -527,6 +527,45 @@ export interface JudgeFinding {
 // RunSummary — everything the runner/judge sees about a single run
 // =============================================================================
 
+/** Maximum prompt-free transport events retained for one scenario run. */
+export const LLM_CALL_DIAGNOSTICS_MAX_EVENTS = 32;
+
+/**
+ * Allowlisted, prompt-free evidence emitted by a host LLM transport. This is
+ * deliberately limited to request/response metadata; it must never grow to
+ * include prompts, response bodies, credentials, or arbitrary headers.
+ */
+export interface LlmCallDiagnostic {
+  callId: string;
+  attempt: number;
+  phase: 'request' | 'response' | 'transport-error' | 'stream-progress' | 'stream-complete' | 'stream-error';
+  observedAt: string;
+  label: 'anthropic-direct' | 'gateway-pool';
+  endpointOrigin: string | null;
+  loopback: boolean | null;
+  governorMode: 'unobserved' | 'disabled' | 'request-local' | 'shared-provider';
+  requestedAccount: string | null;
+  servedAccount: string | null;
+  providerRequestId: string | null;
+  status: number | null;
+  transportFailureCode?: string | null;
+  streamEventCount?: number;
+  textChars?: number;
+  firstStreamEventAt?: string | null;
+  lastStreamEventAt?: string | null;
+  callerAborted?: boolean | null;
+  callerAbortReason?: 'TimeoutError' | 'AbortError' | 'other' | null;
+}
+
+export interface LlmCallDiagnosticSummary {
+  /** Recent events in chronological order, capped at LLM_CALL_DIAGNOSTICS_MAX_EVENTS. */
+  events: LlmCallDiagnostic[];
+  /** Total events observed before run finalization. */
+  total: number;
+  /** Earlier events omitted when the bounded recent-event buffer filled. */
+  omitted: number;
+}
+
 export interface RunSummary {
   runId: string;
   scenarioId: string;
@@ -563,6 +602,8 @@ export interface RunSummary {
     /** For judge_run, this is the number of completed SUT turns. */
     turnIndex: number;
   };
+  /** Allowlisted transport observations collected from sim-user and judge calls. */
+  llmCallDiagnostics?: LlmCallDiagnosticSummary;
 }
 
 export interface ToolInvocationRow {

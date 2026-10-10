@@ -12,6 +12,8 @@
  * operator-side and are injected into the runner via `RunnerDeps.llmCall`.
  */
 
+import type { LlmCallDiagnostic } from './types';
+
 // =============================================================================
 // Pricing — re-exported from the canonical table in @papercusp/model-pricing
 // (cross-backend-cost-capture D-005: ONE price table; this module previously
@@ -105,6 +107,8 @@ export interface LlmCallOpts {
    * expose response start.
    */
   onResponseStart?: () => void;
+  /** Receives prompt-free, allowlisted transport observations while the call is in flight. */
+  onDiagnostic?: (diagnostic: LlmCallDiagnostic) => void;
   /** Stable caller identity for inference-gateway owner attribution. */
   ownerId?: string;
 }
