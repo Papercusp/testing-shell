@@ -41,22 +41,25 @@ import {
   type SimAction,
   type SimHistoryEntry,
 } from './sim-user';
-import type {
-  CardEvent,
-  ChatSession,
-  CompactionPolicy,
-  JudgeResult,
-  JudgeRubric,
-  Persona,
-  RunSummary,
-  Scenario,
-  ScenarioTrigger,
-  ScenarioVariant,
-  TurnInput,
-  TurnResult,
-  ToolResultEvent,
-  TurnTrigger,
-  Violation,
+import {
+  LLM_CALL_DIAGNOSTICS_MAX_EVENTS,
+  type CardEvent,
+  type ChatSession,
+  type CompactionPolicy,
+  type JudgeResult,
+  type JudgeRubric,
+  type LlmCallDiagnostic,
+  type LlmCallDiagnosticSummary,
+  type Persona,
+  type RunSummary,
+  type Scenario,
+  type ScenarioTrigger,
+  type ScenarioVariant,
+  type TurnInput,
+  type TurnResult,
+  type ToolResultEvent,
+  type TurnTrigger,
+  type Violation,
 } from './types';
 
 export type { RunnerDeps } from './deps';
@@ -83,6 +86,8 @@ export interface RunnerOpts {
    * Omit for the baseline run.
    */
   variant?: ScenarioVariant;
+  /** Observe prompt-free transport events even if the runner throws before returning a report. */
+  onDiagnostic?: (diagnostic: LlmCallDiagnostic) => void;
 }
 
 export interface RunReport {
@@ -291,6 +296,7 @@ export async function runScenario(
       matrixIndex: matrixGroupId ? i : undefined,
       ...(opts.seed !== undefined && { seed: opts.seed }),
       ...(opts.variant !== undefined && { variant: opts.variant }),
+      ...(opts.onDiagnostic ? { onDiagnostic: opts.onDiagnostic } : {}),
     }, deps);
     runs.push(report);
   }
@@ -330,6 +336,8 @@ interface OnceArgs {
   seed?: number;
   /** Eval variant to apply (P-001) — see RunnerOpts.variant. */
   variant?: ScenarioVariant;
+  /** Outer observer for evidence that must survive a thrown run. */
+  onDiagnostic?: (diagnostic: LlmCallDiagnostic) => void;
 }
 
 async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunReport> {
@@ -431,11 +439,31 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     throw err;
   }
 
+  const llmCallDiagnosticEvents: LlmCallDiagnostic[] = [];
+  let llmCallDiagnosticTotal = 0;
+  let llmCallDiagnosticOmitted = 0;
+  const recordLlmCallDiagnostic = (diagnostic: LlmCallDiagnostic): void => {
+    llmCallDiagnosticTotal += 1;
+    if (llmCallDiagnosticEvents.length === LLM_CALL_DIAGNOSTICS_MAX_EVENTS) {
+      llmCallDiagnosticEvents.shift();
+      llmCallDiagnosticOmitted += 1;
+    }
+    llmCallDiagnosticEvents.push({ ...diagnostic });
+    try { args.onDiagnostic?.(diagnostic); } catch { /* Evidence sinks must not change run behavior. */ }
+  };
+  const runLlmCall: RunnerDeps['llmCall'] = (opts) => deps.llmCall({
+    ...opts,
+    onDiagnostic: (diagnostic) => {
+      recordLlmCallDiagnostic(diagnostic);
+      try { opts.onDiagnostic?.(diagnostic); } catch { /* Evidence sinks must not change run behavior. */ }
+    },
+  });
+
   const simUser = new SimUser({
     persona,
     goal: scenario.goal,
     model: simModel,
-    llmCall: deps.llmCall,
+    llmCall: runLlmCall,
     // EI-18767396817867279: NEVER pass `scenario.description` straight through
     // here — it is judge-facing text and the sim-user volunteers concrete facts
     // from it, which silently collapses any negative-knowledge scenario.
@@ -761,7 +789,7 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
             },
             summary,
             violations,
-            deps.llmCall,
+            runLlmCall,
           ),
           JUDGE_CALL_TIMEOUT_MS,
           `judgeRun (scenario '${scenario.id}')`,
@@ -794,6 +822,15 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
       judge,
       rubric: scenario.rubric,
     });
+
+    if (llmCallDiagnosticTotal > 0) {
+      const diagnostics: LlmCallDiagnosticSummary = {
+        events: llmCallDiagnosticEvents.map((diagnostic) => ({ ...diagnostic })),
+        total: llmCallDiagnosticTotal,
+        omitted: llmCallDiagnosticOmitted,
+      };
+      summary.llmCallDiagnostics = diagnostics;
+    }
 
     return { summary, simHistory, violations, judge, status };
   } finally {

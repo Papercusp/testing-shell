@@ -13,6 +13,7 @@ import type {
   ChatSession,
   ChatTarget,
   LlmCallFn,
+  LlmCallDiagnostic,
   LlmCallResult,
   RunnerDeps,
   Scenario,
@@ -58,13 +59,18 @@ describe('withTimeout', () => {
 // Runner wiring — a hung session.send / sim-user call must cap-breach, not hang
 // ---------------------------------------------------------------------------
 
-function makeFakeLlmCall(over?: { simHangs?: boolean; judgeHangs?: boolean }): LlmCallFn {
+function makeFakeLlmCall(over?: {
+  simHangs?: boolean;
+  judgeHangs?: boolean;
+  simDiagnostic?: LlmCallDiagnostic;
+}): LlmCallFn {
   return async (opts) => {
     const isJudge = (opts.system ?? '').includes('external reviewer');
     if (isJudge && over?.judgeHangs) {
       return new Promise<never>(() => {}); // never resolves
     }
     if (!isJudge && over?.simHangs) {
+      if (over.simDiagnostic) opts.onDiagnostic?.(over.simDiagnostic);
       return new Promise<never>(() => {}); // never resolves
     }
     const json = isJudge
@@ -196,8 +202,16 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
     vi.useFakeTimers();
     try {
       const scenario = makeScenario();
-      const deps = makeDeps(makeNormalTarget(), { llmCall: makeFakeLlmCall({ simHangs: true }) });
-      const promise = runScenario(scenario, {}, deps);
+      const diagnostic: LlmCallDiagnostic = {
+        callId: 'local-call', attempt: 1, phase: 'transport-error', observedAt: '2026-10-03T01:00:00Z',
+        label: 'anthropic-direct', endpointOrigin: 'http://127.0.0.1:8788', loopback: true,
+        governorMode: 'shared-provider', requestedAccount: null, servedAccount: null,
+        providerRequestId: null, status: 503, transportFailureCode: 'ETIMEDOUT',
+        callerAborted: false,
+      };
+      const deps = makeDeps(makeNormalTarget(), { llmCall: makeFakeLlmCall({ simHangs: true, simDiagnostic: diagnostic }) });
+      const onDiagnostic = vi.fn();
+      const promise = runScenario(scenario, { onDiagnostic }, deps);
       const assertion = expect(promise).resolves.toMatchObject({
         runs: [
           {
@@ -210,12 +224,14 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
                 stage: 'sim_user_next_action',
                 turnIndex: 0,
               },
+              llmCallDiagnostics: { events: [diagnostic], total: 1, omitted: 0 },
             },
           },
         ],
       });
       await vi.advanceTimersByTimeAsync(1500);
       await assertion;
+      expect(onDiagnostic).toHaveBeenCalledWith(diagnostic);
     } finally {
       vi.useRealTimers();
     }
