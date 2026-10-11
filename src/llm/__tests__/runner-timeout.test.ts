@@ -237,6 +237,42 @@ describe('runner turn-loop timeout guard (EI-7597)', () => {
     }
   });
 
+  it('retains target transport diagnostics when the first send times out without a turn', async () => {
+    vi.useFakeTimers();
+    try {
+      const diagnostic: LlmCallDiagnostic = {
+        callId: 'sut-call', attempt: 1, phase: 'response', observedAt: '2026-10-11T22:36:01Z',
+        label: 'gateway-pool', endpointOrigin: 'http://127.0.0.1:8788', loopback: true,
+        governorMode: 'unobserved', requestedAccount: null, servedAccount: 'account-fixture',
+        providerRequestId: 'request-fixture', status: 429,
+      };
+      const target: ChatTarget = {
+        id: 'test', behaviors: [],
+        async open(opts) {
+          return {
+            sessionId: 'test', async close() {},
+            async send() {
+              opts.onDiagnostic?.(diagnostic);
+              return new Promise<never>(() => {});
+            },
+          };
+        },
+      };
+      const onDiagnostic = vi.fn(() => { throw new Error('observer failure'); });
+      const pending = runScenario(makeScenario({ triggers: [{ on: 'after_turn', param: 0, fire: 'user_message' }] }),
+        { onDiagnostic }, makeDeps(target));
+      const assertion = expect(pending).resolves.toMatchObject({ runs: [{ status: 'errored', summary: {
+        turns: [], timeout: { stage: 'sut_session_send', turnIndex: 0 },
+        llmCallDiagnostics: { events: [diagnostic], total: 1, omitted: 0 },
+      } }] });
+      await vi.advanceTimersByTimeAsync(1500);
+      await assertion;
+      expect(onDiagnostic).toHaveBeenCalledWith(diagnostic);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a normal (fast) run is unaffected by the timeout guard', async () => {
     const scenario = makeScenario();
     const report = await runScenario(scenario, {}, makeDeps(makeNormalTarget()));

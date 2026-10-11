@@ -102,6 +102,8 @@ export interface SessionOptions {
    * loud on an unknown key or malformed value.
    */
   targetConfig?: Readonly<Record<string, unknown>>;
+  /** Prompt-free transport events, retained even when send() never returns a turn. */
+  onDiagnostic?: (diagnostic: LlmCallDiagnostic) => void;
 }
 
 export interface ChatSession {

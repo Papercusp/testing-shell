@@ -422,23 +422,6 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
         `cannot apply variant '${args.variant.id}' (it would be silently ignored)`,
     );
   }
-  let session: ChatSession;
-  try {
-    session = await target.open({
-      runId,
-      sutModel,
-      workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
-      transport: scenario.transport ?? 'http-sse',
-      dispatchOverride: scenario.toolOverride,
-      ...(args.variant !== undefined && { variant: args.variant }),
-      ...(scenario.targetConfig !== undefined && { targetConfig: scenario.targetConfig }),
-    });
-  } catch (err) {
-    // open() failed after setup applied — clean the seeds before rethrowing.
-    await runSetupCleanup(setupCleanup, scenario.id);
-    throw err;
-  }
-
   const llmCallDiagnosticEvents: LlmCallDiagnostic[] = [];
   let llmCallDiagnosticTotal = 0;
   let llmCallDiagnosticOmitted = 0;
@@ -451,6 +434,24 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
     llmCallDiagnosticEvents.push({ ...diagnostic });
     try { args.onDiagnostic?.(diagnostic); } catch { /* Evidence sinks must not change run behavior. */ }
   };
+  let session: ChatSession;
+  try {
+    session = await target.open({
+      runId,
+      sutModel,
+      workspaceMode: scenario.realWorkspace ? 'real' : 'isolated',
+      transport: scenario.transport ?? 'http-sse',
+      dispatchOverride: scenario.toolOverride,
+      onDiagnostic: recordLlmCallDiagnostic,
+      ...(args.variant !== undefined && { variant: args.variant }),
+      ...(scenario.targetConfig !== undefined && { targetConfig: scenario.targetConfig }),
+    });
+  } catch (err) {
+    // open() failed after setup applied — clean the seeds before rethrowing.
+    await runSetupCleanup(setupCleanup, scenario.id);
+    throw err;
+  }
+
   const runLlmCall: RunnerDeps['llmCall'] = (opts) => deps.llmCall({
     ...opts,
     onDiagnostic: (diagnostic) => {
