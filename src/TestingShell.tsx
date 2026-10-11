@@ -17,7 +17,7 @@
  */
 
 import { type ReactElement, type ReactNode } from 'react';
-import { useQueryState, parseAsStringEnum } from 'nuqs';
+import { useQueryState, parseAsString } from 'nuqs';
 import './testing-shell.css';
 import DomainTestPanel from './DomainTestPanel';
 import { type TestingDataSource } from './data-source';
@@ -98,11 +98,12 @@ export default function TestingShell({
   railHeader,
 }: TestingShellProps): ReactElement {
   const shown = visibleTabs(tabs, platform);
-  const tabIds = shown.map((t) => t.id) as [string, ...string[]];
-  const [tab, setTab] = useQueryState(
-    queryKey,
-    parseAsStringEnum<string>(tabIds).withDefault(defaultTabId ?? shown[0]?.id ?? ''),
-  );
+  // Keep the URL value while an asynchronous registry is still loading. An
+  // enum parser caches its initial fallback and does not reparse that value
+  // when the declared tabs arrive or disappear.
+  const [requestedTab, setTab] = useQueryState(queryKey, parseAsString);
+  const fallbackTab = shown.find((t) => t.id === defaultTabId)?.id ?? shown[0]?.id ?? '';
+  const tab = shown.some((t) => t.id === requestedTab) ? requestedTab! : fallbackTab;
 
   // Group by tier in tierLabels key order; drop empty tiers.
   const groups = Object.keys(tierLabels)
