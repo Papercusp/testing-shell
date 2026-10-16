@@ -165,6 +165,31 @@ function makeDeps(target: ChatTarget, over: Partial<RunnerDeps> = {}): RunnerDep
 }
 
 describe('runner turn-loop timeout guard (EI-7597)', () => {
+  it('bounds post-loop telemetry and passes its measured run interval and cancellation signal', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pull = vi.fn((_id: string, _window?: unknown) => new Promise<never>(() => {}));
+    try {
+      const promise = runScenario(makeScenario(), {}, makeDeps(makeNormalTarget(), {
+        telemetry: { pullToolInvocations: pull, pullContinueChainRows: pull },
+      }));
+      await vi.advanceTimersByTimeAsync(6000);
+      const report = await promise;
+      expect(pull).toHaveBeenCalledTimes(2);
+      const [clientId, window] = pull.mock.calls[0] as [string, {
+        startedAt: Date; finishedAt: Date; signal: AbortSignal;
+      }];
+      expect(clientId).toContain('llm-testing/');
+      expect(window.startedAt).toEqual(report.runs[0].summary.startedAt);
+      expect(window.finishedAt).toEqual(report.runs[0].summary.finishedAt);
+      expect(window.signal.aborted).toBe(true);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('telemetry pull failed'));
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('cap-breaches (wallclock) instead of hanging when session.send never resolves', async () => {
     vi.useFakeTimers();
     try {

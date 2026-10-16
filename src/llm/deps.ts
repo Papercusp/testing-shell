@@ -37,9 +37,15 @@ export type ModelResolver = () => Promise<{ judgeModel?: string; simModel?: stri
  * skipped if absent. Matches operator `telemetry.ts`:
  * `pullToolInvocations` / `pullContinueChainRows`.
  */
+export interface TelemetryReadWindow {
+  startedAt: Date;
+  finishedAt: Date;
+  signal?: AbortSignal;
+}
+
 export interface TelemetryProvider {
-  pullToolInvocations(uiClientId: string): Promise<ToolInvocationRow[]>;
-  pullContinueChainRows(uiClientId: string): Promise<ContinueChainRow[]>;
+  pullToolInvocations(uiClientId: string, window?: TelemetryReadWindow): Promise<ToolInvocationRow[]>;
+  pullContinueChainRows(uiClientId: string, window?: TelemetryReadWindow): Promise<ContinueChainRow[]>;
 }
 
 /**

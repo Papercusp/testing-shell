@@ -713,16 +713,21 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   let toolInvocations: RunSummary['toolInvocations'] = [];
   let continueChainRows: RunSummary['continueChainRows'] = [];
   if (deps.telemetry) {
+    const controller = new AbortController();
+    const window = { startedAt, finishedAt, signal: controller.signal };
     try {
-      [toolInvocations, continueChainRows] = await Promise.all([
-        deps.telemetry.pullToolInvocations(uiClientId),
-        deps.telemetry.pullContinueChainRows(uiClientId),
-      ]);
+      [toolInvocations, continueChainRows] = await withTimeout(Promise.all([
+        deps.telemetry.pullToolInvocations(uiClientId, window),
+        deps.telemetry.pullContinueChainRows(uiClientId, window),
+      ]), 5000, `telemetry (scenario '${scenario.id}')`);
     } catch (err) {
       // Telemetry pull is best-effort — a PG hiccup shouldn't crash the run
       // when we already have the SSE-side data. Asserts that depend on
       // PG rows will surface their own miss; this just records the warning.
       console.warn(`[llm-testing] telemetry pull failed: ${(err as Error).message}`);
+    } finally {
+      // A caller deadline must also abandon the provider's database work.
+      controller.abort(new Error('LLM telemetry read finished or exceeded its budget'));
     }
   }
   const summary: RunSummary = {
