@@ -11,7 +11,7 @@
  * the seam contract the operator (and any borrower) implements later.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runScenario, type RunReport } from '../runner';
 import type {
@@ -141,6 +141,103 @@ function makeDeps(over: Partial<RunnerDeps> = {}): { deps: RunnerDeps; sends: { 
 // -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
+
+describe('runScenario — claim admission', () => {
+  beforeEach(() => vi.stubEnv('PAPERCUSP_LLM_TEST_SKIP_CLAIM', '0'));
+  afterEach(() => vi.unstubAllEnvs());
+
+  function fixture() {
+    const scenario = makeScenario();
+    scenario.setup = { mem0: [{ kind: 'project', body: 'claim-protected seed' }] };
+    scenario.triggers = [{ on: 'after_turn', fire: 'user_message', param: 0 }];
+    const llmCall = vi.fn(makeFakeLlmCall().fn);
+    const applySetup = vi.fn(async () => {});
+    const persistRunReport = vi.fn(async () => {});
+    const release = vi.fn(async () => {});
+    const { deps, sends } = makeDeps({ llmCall, applySetup, store: { persistRunReport } });
+    const getTarget = vi.fn(deps.getTarget);
+    deps.getTarget = getTarget;
+    return { scenario, deps, sends, llmCall, applySetup, persistRunReport, release, getTarget };
+  }
+
+  it.each([new Error('claim database unavailable'), 'claim transport unavailable'])(
+    'stops before effects when the configured claim store throws %s',
+    async (failure) => {
+      const f = fixture();
+      const tryClaim = vi.fn(async (): Promise<never> => { throw failure; });
+      f.deps.claim = { tryClaim, release: f.release };
+
+      await expect(runScenario(f.scenario, {}, f.deps)).rejects.toBe(failure);
+
+      expect(tryClaim).toHaveBeenCalledOnce();
+      expect(f.applySetup).not.toHaveBeenCalled();
+      expect(f.getTarget).not.toHaveBeenCalled();
+      expect(f.llmCall).not.toHaveBeenCalled();
+      expect(f.persistRunReport).not.toHaveBeenCalled();
+      expect(f.release).not.toHaveBeenCalled();
+      expect(f.sends.value).toBe(0);
+    },
+  );
+
+  it('keeps a busy claim from starting scenario effects', async () => {
+    const f = fixture();
+    f.deps.claim = {
+      tryClaim: vi.fn(async () => ({
+        ok: false as const,
+        reason: 'busy' as const,
+        holder: { ownerId: 'competing-runner', acquiredAt: new Date(0), expiresAt: new Date(60_000) },
+      })),
+      release: f.release,
+    };
+
+    await expect(runScenario(f.scenario, {}, f.deps)).rejects.toThrow('claim_busy:');
+    expect(f.applySetup).not.toHaveBeenCalled();
+    expect(f.getTarget).not.toHaveBeenCalled();
+    expect(f.llmCall).not.toHaveBeenCalled();
+    expect(f.persistRunReport).not.toHaveBeenCalled();
+    expect(f.release).not.toHaveBeenCalled();
+  });
+
+  it('runs and releases an accepted claim before persisting the report', async () => {
+    const f = fixture();
+    const tryClaim = vi.fn<NonNullable<RunnerDeps['claim']>['tryClaim']>(async () => ({
+      ok: true as const, claimKey: 'accepted-claim', ownerId: 'runner', expiresAt: new Date(60_000),
+    }));
+    f.deps.claim = { tryClaim, release: f.release };
+
+    const report = await runScenario(f.scenario, {}, f.deps);
+
+    expect(f.sends.value).toBeGreaterThan(0);
+    expect(f.applySetup).toHaveBeenCalledOnce();
+    expect(f.release).toHaveBeenCalledWith('accepted-claim', tryClaim.mock.calls[0][0].ownerId);
+    expect(f.persistRunReport).toHaveBeenCalledOnce();
+    expect(f.persistRunReport).toHaveBeenCalledWith(report, f.scenario.rubric.version, expect.any(String));
+    expect(f.release.mock.invocationCallOrder[0]).toBeLessThan(f.persistRunReport.mock.invocationCallOrder[0]);
+  });
+
+  it('supports hosts that intentionally omit the claim seam', async () => {
+    const f = fixture();
+
+    await runScenario(f.scenario, {}, f.deps);
+
+    expect(f.sends.value).toBeGreaterThan(0);
+    expect(f.persistRunReport).toHaveBeenCalledOnce();
+  });
+
+  it('retains the explicit isolated-test claim bypass', async () => {
+    vi.stubEnv('PAPERCUSP_LLM_TEST_SKIP_CLAIM', '1');
+    const f = fixture();
+    const tryClaim = vi.fn(async (): Promise<never> => { throw new Error('must not reach test ledger'); });
+    f.deps.claim = { tryClaim, release: f.release };
+
+    await runScenario(f.scenario, {}, f.deps);
+
+    expect(tryClaim).not.toHaveBeenCalled();
+    expect(f.sends.value).toBeGreaterThan(0);
+    expect(f.persistRunReport).toHaveBeenCalledOnce();
+    expect(f.release).not.toHaveBeenCalled();
+  });
+});
 
 describe('runScenario — store persistence seam (P-071)', () => {
   it('drives at least one turn through the injected target', async () => {

@@ -373,27 +373,24 @@ async function runOnce(args: OnceArgs, deps: RunnerDeps): Promise<SingleRunRepor
   // traceability; the probe strips it before reading the pid.
   const claimOwner = `${hostname()}:${process.pid}/${runId.slice(0, 8)}`;
   if (!skipClaim && deps.claim) {
-    try {
-      const claim = await deps.claim.tryClaim({
-        scenarioId: scenario.id,
-        identityHash,
-        matrixIndex: args.matrixIndex,
-        ownerId: claimOwner,
-        metadata: { sutModel, judgeModel, simModel },
-      });
-      if (!claim.ok) {
-        // Another runner already owns this identity. Caller (the CLI
-        // batch loop) treats a thrown skip-error as a soft skip rather
-        // than a hard failure — see bin/llm-test.ts.
-        throw new Error(
-          `claim_busy: ${scenario.id} held by ${claim.holder.ownerId} until ${claim.holder.expiresAt.toISOString()}`,
-        );
-      }
-      claimKey = claim.claimKey;
-    } catch (err) {
-      if ((err as Error).message?.startsWith('claim_busy')) throw err;
-      console.warn(`[llm-testing] ledger unavailable (${(err as Error).message}); proceeding without claim.`);
+    // A supplied claim store is an admission requirement. Its failure must
+    // reach the caller before setup, target/model calls or report persistence.
+    const claim = await deps.claim.tryClaim({
+      scenarioId: scenario.id,
+      identityHash,
+      matrixIndex: args.matrixIndex,
+      ownerId: claimOwner,
+      metadata: { sutModel, judgeModel, simModel },
+    });
+    if (!claim.ok) {
+      // Another runner already owns this identity. Caller (the CLI
+      // batch loop) treats a thrown skip-error as a soft skip rather
+      // than a hard failure — see bin/llm-test.ts.
+      throw new Error(
+        `claim_busy: ${scenario.id} held by ${claim.holder.ownerId} until ${claim.holder.expiresAt.toISOString()}`,
+      );
     }
+    claimKey = claim.claimKey;
   }
 
   // Scenario setup (memory seeds, fixture rows) — applied BEFORE the session
